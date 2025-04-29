@@ -1,6 +1,6 @@
 # Pod Flow Overview
 
-The repo is intended to be a fully standalone use case MOCK environment. It provided all of the tools and script necessary to create a set of PODs, and GPC circuits, to prove and verify POD data both off-chain and on-chain (coming soon), along with integration into teh EVE Frontier frontned scaffold (coming soon), and the World V2 contracts (coming soon).
+The repo is intended to be a fully standalone use case MOCK environment. It provided all of the tools and scripts necessary to create a set of PODs, and GPC circuits, to prove and verify POD data both off-chain and on-chain (coming soon), along with integration into teh EVE Frontier PAI endpoints, teh Frontier frontend dapp scaffold (coming soon), and the World V2 contracts (coming soon).
 It includes pre-generated mock POD data, allowing developers to experiment with the proof generation and verification workflow without needing to set up external data fetching initially. Circuit discovery (`find-circuit`) operates entirely on locally compiled artifacts.
 
 # Pod Flow Project Setup
