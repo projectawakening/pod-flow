@@ -1,0 +1,28 @@
+{
+  "name": "@pod-flow/pods",
+  "version": "0.0.1",
+  "description": "Package for handling pod generation from game data and related scripts",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "fetch-item-types": "ts-node scripts/fetchItemTypes.ts",
+    "fetch-base-solar-systems": "ts-node scripts/fetchBaseSolarSystems.ts",
+    "update-and-fetch": "ts-node scripts/updateSolarSystemsAndFetchAssemblies.ts",
+    "fetch-killmails": "ts-node scripts/fetchKillmails.ts",
+    "initialize-game-data": "pnpm run fetch-item-types && pnpm run fetch-base-solar-systems",
+    "update-game-data": "pnpm run update-and-fetch && pnpm run fetch-killmails",
+    "generate-killmail-pods": "ts-node scripts/generateKillmailPods.ts",
+    "generate-item-type-pods": "ts-node scripts/generateItemTypePods.ts",
+    "generate-smart-assembly-pods": "ts-node scripts/generateSmartAssemblyPods.ts",
+    "generate-solar-system-pods": "ts-node scripts/generateSolarSystemPods.ts",
+    "generate-all-pods": "pnpm run generate-killmail-pods && pnpm run generate-item-type-pods && pnpm run generate-smart-assembly-pods && pnpm run generate-solar-system-pods",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pcd/pod": "^0.5.0",
+    "dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.2"
+  }
+}

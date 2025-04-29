@@ -1,0 +1,31 @@
+{
+  "name": "@pod-flow/gpc",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Manages GPC circuit configurations, compilation, and proof generation workflow.",
+  "scripts": {
+    "gen-proof-requirements": "ts-node scripts/gen-proof-requirements.ts",
+    "gen-proof-inputs": "ts-node scripts/gen-proof-inputs.ts",
+    "find-circuit": "ts-node scripts/find-circuit.ts",
+    "compile-circuit": "ts-node scripts/compile-circuit.ts",
+    "add-circuit-params": "ts-node scripts/add-compiled-circuit-params.ts",
+    "setup:fetch-ptau": "ts-node scripts/fetch-ptau.ts",
+    "gen-proof": "NODE_OPTIONS=--max-old-space-size=16384 ts-node scripts/gen-proof.ts",
+    "verify-proof": "ts-node scripts/verify-proof.ts"
+  },
+  "dependencies": {
+    "@pcd/gpc": "^0.4.0",
+    "@pcd/pod": "^0.5.0",
+    "@pcd/util": "0.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@pcd/gpcircuits": "^0.5.0",
+    "@types/lodash": "^4.17.16",
+    "@types/snarkjs": "^0.7.9",
+    "@zk-kit/binary-merkle-root.circom": "^1.0.0",
+    "circomkit": "^0.3.2",
+    "circomlib": "^2.0.5"
+  }
+}

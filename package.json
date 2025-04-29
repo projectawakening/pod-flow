@@ -1,0 +1,57 @@
+{
+  "name": "pod-flow",
+  "private": true,
+  "scripts": {
+    "build": "pnpm recursive run build",
+    "dev": "mprocs",
+    "dev:client": "pnpm --filter 'client' run dev",
+    "dev:contracts": "pnpm --filter 'contracts' dev",
+    "foundry:up": "curl -L https://foundry.paradigm.xyz | bash && bash $HOME/.foundry/bin/foundryup",
+    "mud:up": "pnpm mud set-version --tag main && pnpm install",
+    "prepare": "(forge --version || pnpm foundry:up)",
+    "test": "pnpm recursive run test",
+    "generate-authority-key": "node scripts/generateAuthorityKey.js",
+    "pods:fetch-item-types": "pnpm --filter @pod-flow/pods fetch-item-types",
+    "pods:fetch-base-solar-systems": "pnpm --filter @pod-flow/pods fetch-base-solar-systems",
+    "pods:update-and-fetch": "pnpm --filter @pod-flow/pods update-and-fetch",
+    "pods:fetch-killmails": "pnpm --filter @pod-flow/pods fetch-killmails",
+    "pods:initialize-game-data": "pnpm --filter @pod-flow/pods initialize-game-data",
+    "pods:update-game-data": "pnpm --filter @pod-flow/pods update-game-data",
+    "pods:generate-killmail-pods": "pnpm --filter @pod-flow/pods generate-killmail-pods",
+    "pods:generate-item-type-pods": "pnpm --filter @pod-flow/pods generate-item-type-pods",
+    "pods:generate-smart-assembly-pods": "pnpm --filter @pod-flow/pods generate-smart-assembly-pods",
+    "pods:generate-solar-system-pods": "pnpm --filter @pod-flow/pods generate-solar-system-pods",
+    "pods:generate-all-pods": "pnpm --filter @pod-flow/pods generate-all-pods",
+    "pods:test": "pnpm --filter @pod-flow/pods test",
+    "compile:pods": "pnpm --filter @pod-flow/pods build",
+    "compile:contracts": "pnpm --filter @pod-flow/contracts build",
+    "mock:generate-location-pods": "cd packages/location-bounded-mock && ts-node scripts/generateMockLocationPods.ts",
+    "mock:generate-distance-proof": "cd packages/location-bounded-mock && ts-node scripts/generateDistanceProof.ts",
+    "mock:run-location-bounded": "cd packages/location-bounded-mock && ts-node scripts/runLocationBoundedMock.ts",
+    "setup:gpc-ptau": "pnpm --filter @pod-flow/gpc setup:fetch-ptau"
+  },
+  "devDependencies": {
+    "@latticexyz/cli": "2.2.15-main-ba5191c3d6f74b3c4982afd465cf449d23d70bb7",
+    "@latticexyz/common": "2.2.15-main-ba5191c3d6f74b3c4982afd465cf449d23d70bb7",
+    "@latticexyz/explorer": "2.2.15-main-ba5191c3d6f74b3c4982afd465cf449d23d70bb7",
+    "@latticexyz/store-indexer": "2.2.15-main-ba5191c3d6f74b3c4982afd465cf449d23d70bb7",
+    "@types/debug": "4.1.7",
+    "@types/node": "^20.11.24",
+    "@typescript-eslint/eslint-plugin": "7.1.1",
+    "@typescript-eslint/parser": "7.1.1",
+    "eslint": "8.57.0",
+    "mprocs": "^0.7.1",
+    "shx": "^0.3.4",
+    "snarkjs": "^0.7.5",
+    "ts-node": "^10.9.2",
+    "typescript": "5.4.2"
+  },
+  "engines": {
+    "node": "^18",
+    "pnpm": "^8 || ^9"
+  },
+  "dependencies": {
+    "@zk-kit/eddsa-poseidon": "^1.1.0",
+    "@zk-kit/utils": "^1.4.1"
+  }
+}
