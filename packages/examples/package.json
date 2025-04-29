@@ -1,0 +1,16 @@
+{
+  "name": "@pod-flow/examples",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "description": "Package for generating mock PODs, and a GPC proofs for various examples.",
+  "scripts": {
+    "generate-location-pods": "ts-node location-bounding/scripts/generateMockLocationPods.ts",
+    "generate-distance-proof": "ts-node location-bounding/scripts/generateDistanceProof.ts",
+    "run-location-bounded-mock": "pnpm run generate-location-pods && pnpm run generate-distance-proof ./location-bounding/proof-configs/distanceProofConfig.ts ./location-bounding/pod-data/location_pods.json"
+  },
+  "dependencies": {
+    "@pcd/gpc": "^0.4.0",
+    "@pcd/pod": "^0.5.0"
+  }
+}

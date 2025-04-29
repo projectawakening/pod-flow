@@ -12,14 +12,8 @@ const CIRCOM_SRC_DIR = path.resolve(__dirname, '..', 'node_modules', '@pcd', 'gp
 const CIRCOM_SRC_FILENAME = 'proto-pod-gpc.circom';
 const CIRCOM_SRC_FILE_PATH = path.join(CIRCOM_SRC_DIR, CIRCOM_SRC_FILENAME);
 
-// <<< Define target directory for temporary wrapper file >>>
-// const TEMP_WRAPPER_DIR = CIRCOM_SRC_DIR; 
-
 const ARTIFACTS_BASE_DIR = path.resolve(__dirname, '..', 'artifacts');
-const SETUP_DIR = path.resolve(__dirname, '..', 'setup');
 const PTAU_DIR = path.resolve(__dirname, '..', 'ptau'); // Use the dir configured in circomkit.json
-// const PTAU_FILENAME_PT21 = "powersOfTau28_hez_final_21.ptau"; // Standard name for PTAU 21 - REMOVED (unused)
-// const ARTIFACT_BASENAME = 'circuit'; // REMOVED (only used once, can inline)
 
 // Add base directory for requirements files
 const REQUIREMENTS_BASE_DIR = path.resolve(__dirname, '..', 'proof-requirements');
@@ -222,7 +216,6 @@ async function compileCircuit(requirementsFilePath: string) {
 
     await fs.mkdir(circuitArtifactDir, { recursive: true }); // Need this dir for the wrapper
     await fs.mkdir(buildDir, { recursive: true }); // Need the build dir for circom output
-    await fs.mkdir(SETUP_DIR, { recursive: true });
     // console.log(`Intermediate build outputs (r1cs, wasm, sym) will be in: ${buildDir}`);
     // console.log(`Final ZKey/VKey will be in: ${ARTIFACTS_BASE_DIR}`);
     // console.log(`Wrapper file will be created at: ${wrapperCircomFilePath}`);

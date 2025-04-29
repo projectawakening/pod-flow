@@ -13,13 +13,14 @@ This guide outlines the steps required to set up the Pod Flow development enviro
 *   **pnpm:** Version 8 or 9 is required. Install it globally via `npm install -g pnpm` if you don't have it. ([https://pnpm.io/installation](https://pnpm.io/installation))
 *   **Rust & Cargo:** Required for compiling the Circom compiler. See the "Install Circom" section below if you don't have them installed.
 *   **Git:** For cloning the repository.
+*   **Memory:** While not a strict requirement for all operations, GPC circuit compilation (`compile-circuit`) and proof generation (`gen-proof`) can be memory-intensive. The scripts are configured to request up to **16GB of RAM** (`--max-old-space-size=16384`). Ensure your system has sufficient available memory for these steps, especially when working with complex proofs.
 
 ## Setup Steps
 
 **1. Clone the Repository**
 
 ```bash
-git clone <your-repository-url> 
+git clone https://github.com/projectawakening/pod-flow
 cd pod-flow 
 ```
 
@@ -95,7 +96,7 @@ This project requires the **Rust version** of the Circom compiler (v2.x.x or hig
 
 Zero-Knowledge proofs require a "Powers of Tau" (`.ptau`) file generated from a trusted setup ceremony. This file contains universal parameters needed for circuit compilation. Since these files are large, we fetch it using a script instead of committing it to Git.
 
-This project is configured to use `pot22` (supporting up to 2^22 constraints), which is suitable for the expected complexity of GPC circuits upto an estimated 15 PODs in a single proof.
+This project is configured to use `pot22` (supporting up to 2^22 constraints), which is suitable for the expected complexity of large GPC circuits upto an estimated 15 PODs in a single proof.
 
 Run the following command from the **root** of the project:
 
@@ -126,30 +127,36 @@ node scripts/generateAuthorityKey.js
 
 This project is a monorepo managed by `pnpm`. It consists of the following packages:
 
-### Simplified Automated Workflow (`location-bounded-mock`)
+### `@pod-flow/examples`
 
-The `@pod-flow/location-bounded-mock` package provides a high-level script (`run-location-bounded-mock`) that abstracts away most of the individual GPC steps for its specific use case (distance proofs) as an exmaple of how to integrate a specific use case with the mock environment.
+*   **Description:** Contains various example implementations demonstrating how to use the Pod Flow GPC system. Each sub-directory typically focuses on a specific use case, providing necessary scripts, proof configurations, and potentially mock data generation.
+*   **Key Examples:**
+    *   [`location-bounding`](./packages/examples/location-bounding/): Demonstrates proving proximity based on PODs representing ship and object locations, along with a distance assertion POD. (Replaces the previous `@pod-flow/location-bounded-mock` package).
+
+### Simplified Automated Workflow (`examples/location-bounding`)
+
+The `location-bounding` example within `@pod-flow/examples` provides a high-level script (`run-location-bounded-mock`) that abstracts away most of the individual GPC steps for its specific use case (distance proofs) as an example of how to integrate a specific use case with the mock environment.
 
 To use this simplified flow:
 
-1.  **(Prerequisite)** Ensure you have a valid GPC Proof Configuration file defining your distance proof constraints (e.g., `distanceProofConfig.ts`) located within the `packages/location-bounded-mock/proof-configs/` directory.
-2.  **(Prerequisite)** Ensure you have generated the necessary input mock PODs. The `run-location-bounded-mock` script handles this, but it assumes the generated PODs (`location_pods.json`) are fresh enough to satisfy any timestamp constraints in your proof config. This script is included in the following script execution, so technically yo udon't need to run it seperately.
+1.  **(Prerequisite)** Ensure you have a valid GPC Proof Configuration file defining your distance proof constraints (e.g., `distanceProofConfig.ts`) located within the `packages/examples/location-bounding/proof-configs/` directory.
+2.  **(Prerequisite)** Ensure you have generated the necessary input mock PODs. The `run-location-bounded-mock` script handles this, but it assumes the generated PODs (`location_pods.json`) are fresh enough to satisfy any timestamp constraints in your proof config. This script is included in the following script execution, so technically you don't need to run it separately.
 3.  Run the `run-location-bounded-mock` script from the **workspace root**: 
     ```bash
-    pnpm --filter @pod-flow/location-bounded-mock run-location-bounded-mock
+    pnpm --filter @pod-flow/examples run-location-bounded-mock
     ```
 
 This command will:
-*   Execute `generate-mock-pods` to create/update `packages/location-bounded-mock/pod-data/location_pods.json`.
-*   Execute `generate-distance-proof`, passing the default paths `./proof-configs/distanceProofConfig.ts` and `./pod-data/location_pods.json` (relative to the `location-bounded-mock` package) as arguments.
-*   The `generate-distance-proof` script then orchestrates the full GPC workflow:
+*   Execute `generate-mock-pods` (script defined in `packages/examples/package.json`) to create/update `packages/examples/location-bounding/pod-data/location_pods.json`.
+*   Execute `generate-distance-proof` (script defined in `packages/examples/package.json`), passing the default paths `./location-bounding/proof-configs/distanceProofConfig.ts` and `./location-bounding/pod-data/location_pods.json` (relative to the `examples` package) as arguments.
+*   The [`generate-distance-proof`](./packages/examples/location-bounding/scripts/generateDistanceProof.ts) script (`packages/examples/location-bounding/scripts/generateDistanceProof.ts`) then orchestrates the full GPC workflow:
     *   Generates requirements (`gen-proof-requirements`).
     *   Finds the best-fit existing circuit (`find-circuit`).
     *   *Optionally* compiles a new circuit if needed (`compile-circuit`).
     *   *Optionally* adds the new circuit to the known set (`add-circuit-params`).
     *   Generates the structured proof inputs (`gen-proof-inputs`).
     *   Generates the final proof (`gen-proof`).
-    *   Copies the generated proof to `packages/location-bounded-mock/output/proof-data/`.
+    *   Copies the generated proof to `packages/examples/location-bounding/proof-output/`.
     *   Verifies the copied proof (`verify-proof`).
 
 This provides a streamlined way to test the distance proof use case from end-to-end.
@@ -195,7 +202,7 @@ Essentially, these adjustments ensure that critical numeric data from the game c
 
 ### `@pod-flow/gpc`
 
-*   **Description:** Handles the Generic Proof Carrying (GPC) circuit workflow. This includes defining circuit parameters, managing circuit artifacts (like `.r1cs`, `.wasm`, `.zkey`), providing example proof configurations, and scripts for compiling circuits and generating inputs for proof generation.
+*   **Description:** Handles the Generic Proof Carrying (GPC) circuit workflow. This includes defining circuit parameters, managing circuit artifacts (like `.r1cs`, `.wasm`, `.zkey`), providing example proof configurations, and scripts for compiling circuits and generating inputs for proof generation (located in [`packages/gpc/scripts/`](./packages/gpc/scripts/)).
 *   **Technology:** Node.js, TypeScript, `@pcd/gpc`, `circom` (external compiler), `snarkjs`.
 *   **Key Scripts:** `generate-requirements`, `generate-inputs`, `generate-circuit-inputs`, `find-circuit`, `compile-circuit`, `setup:fetch-ptau`.
 
@@ -211,25 +218,25 @@ The core workflow for generating a proof for a specific use case involves severa
 
 **Manual Steps:**
 
-1.  **`gen-proof-requirements`**:
+1.  **[`gen-proof-requirements`](./packages/gpc/scripts/gen-proof-requirements.ts)**:
     *   **Purpose:** Calculates the minimum circuit parameters required based on a GPC proof configuration (`.ts` file defining constraints) and a sample set of input PODs (`.json` file).
     *   **How it works:** Analyzes the constraints in the config and the structure/content of the input PODs to determine the necessary `maxObjects`, `maxEntries`, `merkleMaxDepth`, etc.
     *   **Output:** Generates a `_requirements.json` file (e.g., `simpleConfig_requirements.json`) in the `packages/gpc/proof-requirements/` directory.
     *   **Example:**
         ```bash
-        pnpm run gen-proof-requirements ./packages/gpc/proof-configs/simpleConfig.ts ./packages/location-bounded-mock/pod-data/ship_pod.json
+        pnpm run gen-proof-requirements ./packages/examples/location-bounding/proof-configs/distanceProofConfig.ts ./packages/examples/location-bounding/pod-data/ship_pod.json
         ```
 
-2.  **`find-circuit`**:
+2.  **[`find-circuit`](./packages/gpc/scripts/find-circuit.ts)**:
     *   **Purpose:** Checks if a pre-compiled circuit artifact exists locally that meets or exceeds the parameters specified in a `_requirements.json` file. It aims to find the smallest suitable circuit to minimize proving time.
-    *   **How it works:** Compares the input requirements against the parameter sets listed in `packages/gpc/src/circuitParameterSets.ts` and checks for the existence of corresponding artifacts (`.wasm`, `-pkey.zkey`, `-vkey.json`) in the `packages/gpc/artifacts/` directory.
+    *   **How it works:** Compares the input requirements against the parameter sets listed in [`packages/gpc/src/circuitParameterSets.ts`](./packages/gpc/src/circuitParameterSets.ts) and checks for the existence of corresponding artifacts (`.wasm`, `-pkey.zkey`, `-vkey.json`) in the `packages/gpc/artifacts/` directory.
     *   **Output:** Prints the path to the best matching circuit's artifacts or indicates that compilation is needed (`COMPILE_NEEDED <configName>`).
     *   **Example:**
         ```bash
         pnpm run find-circuit ./packages/gpc/proof-requirements/simpleConfig_requirements.json
         ```
 
-3.  **`compile-circuit` (Optional - if `find-circuit` indicates needed)**:
+3.  **[`compile-circuit`](./packages/gpc/scripts/compile-circuit.ts) (Optional - if `find-circuit` indicates needed)**:
     *   **Purpose:** Compiles a new circuit based on a requirements file and performs the necessary setup (`snarkjs`) to generate the proving and verification keys.
     *   **How it works:** Reads the requirements, generates a canonical circuit name based on these parameters (e.g., `1o-11e-...`), creates a temporary wrapper `.circom` file that includes the base `proto-pod-gpc.circom` template and instantiates it with the loaded parameters, compiles this wrapper file using `circomkit compile` to generate intermediate files (R1CS, WASM witness generator components, etc.) in the `build/circomkit/<circuitName>/` directory, performs the Groth16 Phase 2 trusted setup using `snarkjs` commands (`setup`, `contribute` (dummy), `export verificationkey`) and the downloaded `.ptau` file (intermediate keys also placed in the build directory), and finally moves the final artifacts (`.wasm`, `circuit_final.zkey` renamed to `-pkey.zkey`, `verification_key.json` renamed to `-vkey.json`) from the build directory to the main `packages/gpc/artifacts/` directory.
     *   **Example:**
@@ -239,15 +246,15 @@ The core workflow for generating a proof for a specific use case involves severa
     *   **Security Note:** The `snarkjs zkey contribute` step in this script uses a **dummy contribution**. This means the setup is **not cryptographically secure** for production use. It's sufficient for testing and development within this mock environment, but a real deployment would require a proper multi-party computation (MPC) ceremony for the Phase 2 setup of each specific circuit.
     *   **Important:** The intermediate build directory (`build/circomkit/<circuitName>/`) is **not** automatically cleaned up by this script.
 
-4.  **`add-circuit-params` (Optional - after compiling a *new* circuit)**:
-    *   **Purpose:** Registers the parameters of a newly compiled circuit into the `packages/gpc/src/circuitParameterSets.ts` file. **This step is crucial** if you want the newly compiled circuit to be discoverable by `find-circuit` and usable by subsequent `gen-proof` calls for matching requirements.
+4.  **[`add-circuit-params`](./packages/gpc/scripts/add-compiled-circuit-params.ts) (Optional - after compiling a *new* circuit)**:
+    *   **Purpose:** Registers the parameters of a newly compiled circuit into the [`packages/gpc/src/circuitParameterSets.ts`](./packages/gpc/src/circuitParameterSets.ts) file. **This step is crucial** if you want the newly compiled circuit to be discoverable by `find-circuit` and usable by subsequent `gen-proof` calls for matching requirements.
     *   **How it works:** Reads the requirements file, derives the circuit ID, checks that the final artifacts exist in the `artifacts` directory, and then adds/updates the entry in the `supportedParameterSets` array in `circuitParameterSets.ts`.
     *   **Example:**
         ```bash
         pnpm run add-circuit-params ./packages/gpc/proof-requirements/simpleConfig_requirements.json
         ```
 
-5.  **`gen-proof-inputs`**:
+5.  **[`gen-proof-inputs`](./packages/gpc/scripts/gen-proof-inputs.ts)**:
     *   **Purpose:** Generates the structured input `.json` file required by the `gen-proof` script.
     *   **How it works:** Takes a proof configuration file (`.ts`) and a corresponding set of input PODs (`.json` array), verifies the PODs match the config keys, and structures them into the `GPCProofInputs` format (including the `pods` record).
     *   **Output:** Creates a `_gpc_inputs.json` file (e.g., `simpleConfig_gpc_inputs.json`) in the `packages/gpc/proof-inputs/` directory.
@@ -256,7 +263,7 @@ The core workflow for generating a proof for a specific use case involves severa
         pnpm run gen-proof-inputs ./packages/gpc/proof-configs/simpleConfig.ts ./packages/location-bounded-mock/pod-data/ship_pod.json
         ```
 
-6.  **`gen-proof`**:
+6.  **[`gen-proof`](./packages/gpc/scripts/gen-proof.ts)**:
     *   **Purpose:** Generates the actual Zero-Knowledge proof based on a config and structured inputs.
     *   **How it works:** Takes the proof config (`.ts`) and the structured GPC inputs (`_gpc_inputs.json`), determines the correct circuit artifacts (using logic similar to `find-circuit` based on requirements derived from the config/inputs), performs pre-computation (`gpcPreProve`), calls `snarkjs groth16 fullProve` using the circuit `.wasm` and `-pkey.zkey`, performs post-computation (`gpcPostProve`), and saves the resulting proof data (`proof` object, `boundConfig`, `revealedClaims`).
     *   **Output:** Creates a `_<circuitId>_proof.json` file (e.g., `simpleConfig_1o-11e..._proof.json`) in the `packages/gpc/proofs/` directory.
@@ -265,7 +272,7 @@ The core workflow for generating a proof for a specific use case involves severa
         pnpm run gen-proof ./packages/gpc/proof-configs/simpleConfig.ts ./packages/gpc/proof-inputs/simpleConfig_gpc_inputs.json
         ```
 
-7.  **`verify-proof`**:
+7.  **[`verify-proof`](./packages/gpc/scripts/verify-proof.ts)**:
     *   **Purpose:** Verifies a generated proof against the corresponding verification key.
     *   **How it works:** Loads the proof file (`_proof.json`), extracts the proof object, bound config, and revealed claims. It uses the `circuitIdentifier` from the bound config to find the matching circuit parameters in `circuitParameterSets.ts`, locates the corresponding verification key (`-vkey.json`) in the `artifacts` directory, and calls the `gpcVerify` function (which uses `snarkjs groth16 verify`).
     *   **Output:** Prints whether the proof is VALID or INVALID.

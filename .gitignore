@@ -18,6 +18,5 @@ packages/gpc/proof-inputs/
 packages/gpc/proof-requirements/
 packages/gpc/proofs/
 
-# Generated location-bounded-mock files
-packages/location-bounded-mock/output/
-packages/location-bounded-mock/pod-data/
+# Generated proof output folders
+**/proof-output/

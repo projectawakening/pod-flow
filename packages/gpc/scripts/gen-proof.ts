@@ -53,8 +53,9 @@ function logStep(message: string) {
 // Helper to load a TS config file using require
 function loadProofConfig(configPath: string): GPCProofConfig {
     // <<< Resolve path relative to CWD >>>
-    const absolutePath = path.resolve(process.cwd(), configPath);
-    console.log(`Attempting to load config from resolved path: ${absolutePath}`);
+    // const absolutePath = path.resolve(process.cwd(), configPath);
+    const absolutePath = configPath; // Assume configPath is already absolute
+    console.log(`Attempting to load config from provided path: ${absolutePath}`);
     try {
         const configModule = require(absolutePath);
         const exportKey = Object.keys(configModule)[0];
@@ -267,73 +268,82 @@ async function generateProof(configPath: string, inputsPath: string) {
         // console.time("snarkjsProve"); // Optional: time the proving
         
         // <<< Add logging before the call >>>
-        // console.log("Attempting to call groth16.fullProve...");
-        // console.log(`Input keys: ${Object.keys(snarkjsInputs).join(', ')}`); // Log top-level keys
+        console.log(`  Using WASM path: ${wasmPath}`);
+        console.log(`  Using PKEY path: ${pkeyPath}`);
+        console.log(`  Input keys: ${Object.keys(snarkjsInputs).join(', ')}`); // Log top-level keys
+        // For more detail (can be very verbose):
+        // console.log("  Full snarkjs inputs:", JSON.stringify(snarkjsInputs, null, 2));
+
+        try {
+            const { proof, publicSignals } = await groth16.fullProve(
+                snarkjsInputs, // <<< Pass the processed input object directly
+                wasmPath, 
+                pkeyPath
+                // logger // Optional: pass a logger object if needed
+            );
+            console.log("groth16.fullProve call completed successfully.");
         
-        const { proof, publicSignals } = await groth16.fullProve(
-            snarkjsInputs, // <<< Pass the processed input object directly
-            wasmPath, 
-            pkeyPath
-            // logger // Optional: pass a logger object if needed
-        );
-        
-        // <<< Add logging after the call >>>
-        // console.log("groth16.fullProve call completed.");
-        
-        // console.timeEnd("snarkjsProve"); // Optional: end timing
-        // console.log("snarkjs.groth16.fullProve completed successfully."); // Covered by logStep
-        // console.log("Raw Proof:", JSON.stringify(proof));
-        // console.log("Raw Public Signals:", publicSignals);
-
-        // 7. Reconstruct Circuit Outputs for gpcPostProve
-        logStep("7. Reconstructing circuit outputs from public signals...");
-        const circuitOutputs = ProtoPODGPC.outputsFromPublicSignals(
-            publicSignals.map(BigInt), // Ensure signals are BigInts
-            circuitDesc.maxEntries,
-            paramMaxVirtualEntries(circuitDesc), // <<< Use imported function
-            circuitDesc.includeOwnerV3,
-            circuitDesc.includeOwnerV4
-        );
-        // console.log("Circuit outputs reconstructed.");
-
-        // 8. Call gpcPostProve
-        logStep("8. Calling gpcPostProve...");
-        const postProveResult = gpcPostProve(
-            proof, 
-            boundConfig, 
-            circuitDesc, // <<< Pass the constructed circuitDesc object
-            proofInputs, // Original inputs with POD instances
-            circuitOutputs
-        );
-        const finalRevealedClaims = postProveResult.revealedClaims;
-        // console.log("gpcPostProve completed successfully.");
-        // console.log("Final Revealed Claims:", JSON.stringify(finalRevealedClaims, (k,v)=>typeof v === 'bigint' ? v.toString() + 'n' : v, 2));
-
-        // 9. Prepare Final Output Data
-        logStep("9. Preparing final output data...");
-        const serializedBoundConfig = boundConfigToJSON(boundConfig);
-        const serializedRevealedClaims = revealedClaimsToJSON(finalRevealedClaims);
-
-        const outputData = {
-            proof: proof, 
-            boundConfig: serializedBoundConfig,
-            revealedClaims: serializedRevealedClaims
-        };
-
-        // 10. Save Output
-        const outputCircuitName = circuitDesc.name; // Use name from desc
-        const inputsBaseName = path.basename(inputsPath, path.extname(inputsPath)).replace('_gpc_inputs', ''); 
-        const outputFilename = `${configBaseName}_${outputCircuitName}_proof.json`; 
-        const outputDir = path.join(__dirname, '..', 'proofs');
-        const outputPath = path.join(outputDir, outputFilename);
-        logStep(`10. Saving final proof object to: ${outputPath}`);
-
-        await fs.mkdir(outputDir, { recursive: true });
-        await writeJsonFile(outputPath, outputData); // writeJsonFile handles BigInts via default JSON.stringify
-        // console.log("Output saved successfully.");
-
-        // <<< Add explicit exit on success >>>
-        process.exit(0);
+            // console.timeEnd("snarkjsProve"); // Optional: end timing
+            // console.log("snarkjs.groth16.fullProve completed successfully."); // Covered by logStep
+            // console.log("Raw Proof:", JSON.stringify(proof));
+            // console.log("Raw Public Signals:", publicSignals);
+    
+            // 7. Reconstruct Circuit Outputs for gpcPostProve
+            logStep("7. Reconstructing circuit outputs from public signals...");
+            const circuitOutputs = ProtoPODGPC.outputsFromPublicSignals(
+                publicSignals.map(BigInt), // Ensure signals are BigInts
+                circuitDesc.maxEntries,
+                paramMaxVirtualEntries(circuitDesc), // <<< Use imported function
+                circuitDesc.includeOwnerV3,
+                circuitDesc.includeOwnerV4
+            );
+            // console.log("Circuit outputs reconstructed.");
+    
+            // 8. Call gpcPostProve
+            logStep("8. Calling gpcPostProve...");
+            const postProveResult = gpcPostProve(
+                proof, 
+                boundConfig, 
+                circuitDesc, // <<< Pass the constructed circuitDesc object
+                proofInputs, // Original inputs with POD instances
+                circuitOutputs
+            );
+            const finalRevealedClaims = postProveResult.revealedClaims;
+            // console.log("gpcPostProve completed successfully.");
+            // console.log("Final Revealed Claims:", JSON.stringify(finalRevealedClaims, (k,v)=>typeof v === 'bigint' ? v.toString() + 'n' : v, 2));
+    
+            // 9. Prepare Final Output Data
+            logStep("9. Preparing final output data...");
+            const serializedBoundConfig = boundConfigToJSON(boundConfig);
+            const serializedRevealedClaims = revealedClaimsToJSON(finalRevealedClaims);
+    
+            const outputData = {
+                proof: proof, 
+                boundConfig: serializedBoundConfig,
+                revealedClaims: serializedRevealedClaims
+            };
+    
+            // 10. Save Output
+            const outputCircuitName = circuitDesc.name; // Use name from desc
+            const inputsBaseName = path.basename(inputsPath, path.extname(inputsPath)).replace('_gpc_inputs', ''); 
+            const outputFilename = `${configBaseName}_${outputCircuitName}_proof.json`; 
+            const outputDir = path.join(__dirname, '..', 'proofs');
+            const outputPath = path.join(outputDir, outputFilename);
+            logStep(`10. Saving final proof object to: ${outputPath}`);
+    
+            await fs.mkdir(outputDir, { recursive: true });
+            await writeJsonFile(outputPath, outputData); // writeJsonFile handles BigInts via default JSON.stringify
+            // console.log("Output saved successfully.");
+    
+            // <<< Add explicit exit on success >>>
+            process.exit(0);
+        } catch (snarkError: any) {
+            console.error("\n--- ERROR during snarkjs.groth16.fullProve --- ");
+            console.error("Message:", snarkError.message);
+            console.error("Stack:", snarkError.stack);
+            // Re-throw the error to be caught by the outer try-catch which exits the process
+            throw snarkError;
+        }
 
     } catch (error: any) {
         console.error(`\n--- ERROR DURING PROOF GENERATION ---`);
@@ -367,7 +377,8 @@ generateProof(configArg, gpcInputsArg).catch(error => {
 async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs> {
     // logStep("Loading GPC Proof Inputs..."); // Redundant with logStep 1
     // <<< Resolve path relative to CWD >>>
-    const absolutePath = path.resolve(process.cwd(), proofInputsPath);
+    // const absolutePath = path.resolve(process.cwd(), proofInputsPath);
+    const absolutePath = proofInputsPath; // Assume proofInputsPath is already absolute
     // console.log(`Attempting to load GPC inputs from resolved path: ${absolutePath}`);
     try {
         const fileContent = await fs.readFile(absolutePath, 'utf-8');
