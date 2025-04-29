@@ -19,7 +19,7 @@ This guide outlines the steps required to set up the Pod Flow development enviro
 **1. Clone the Repository**
 
 ```bash
-git clone <your-repository-url> 
+git clone https://github.com/projectawakening/pod-flow
 cd pod-flow 
 ```
 
