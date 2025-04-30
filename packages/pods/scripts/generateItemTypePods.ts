@@ -71,12 +71,16 @@ function itemTypeToPODEntries(gt: ItemType, typeId: string): PODEntries {
     // Add a type identifier using the constant
     entries['pod_data_type'] = { type: 'string', value: POD_DATA_TYPE };
 
+    // Add a timestamp for when the POD was generated (milliseconds)
+    const nowMillis = Date.now();
+    entries['timestamp'] = { type: 'int', value: BigInt(nowMillis) };
+
     return entries;
 }
 
 // --- Main Script ---
 async function generateItemTypePods() {
-    console.log('Starting ItemType POD generation...');
+    console.log('Starting ItemType POD generation (keyed by contentId)...');
     const privateKey = loadPrivateKey();
 
     // 1. Read source item types
@@ -89,29 +93,31 @@ async function generateItemTypePods() {
     }
     console.log(`Read ${typeIds.length} source item types.`);
 
-    // 2. Process all item types (overwrite strategy)
-    const outputPods: { [key: string]: JSONPOD } = {}; // Use object for output
+    // 2. Process all item types
+    const outputPodsByContentId: { [contentId: string]: JSONPOD } = {};
     let processedCount = 0;
+    let errorCount = 0;
 
     for (const typeId of typeIds) {
         const itemType = sourceItemTypes[typeId];
-        if (!itemType) continue; // Should not happen, but safety check
+        if (!itemType) continue;
 
         try {
             const podEntries = itemTypeToPODEntries(itemType, typeId);
             const pod = POD.sign(podEntries, privateKey);
-            outputPods[typeId] = pod.toJSON();
+            const contentId = pod.contentID;
+            outputPodsByContentId[contentId.toString()] = pod.toJSON();
             processedCount++;
         } catch (error: any) {
-            // Catch errors thrown by the new validation logic
             console.error(`Error processing item type ${typeId}: ${error.message}`);
+            errorCount++;
         }
     }
 
-    console.log(`Generated ${processedCount} item type PODs.`);
+    console.log(`Processed ${processedCount + errorCount} item types. Generated ${processedCount} PODs. Encountered ${errorCount} errors.`);
 
-    // 3. Write the output object
-    await writeJsonFile(OUTPUT_PODS_FILE, outputPods);
+    // 3. Write the output object keyed by contentId
+    await writeJsonFile(OUTPUT_PODS_FILE, outputPodsByContentId);
 
     console.log('ItemType POD generation finished.');
 }

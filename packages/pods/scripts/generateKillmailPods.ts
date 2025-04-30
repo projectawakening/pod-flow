@@ -39,7 +39,7 @@ function createKillmailKey(km: Killmail): string {
 
 // --- Main Script ---
 async function generateKillmails() {
-    console.log('Starting Killmail POD generation...');
+    console.log('Starting Killmail POD generation (keyed by contentId, skip existing)...');
     const privateKey = loadPrivateKey();
 
     // 1. Read source killmails
@@ -50,49 +50,54 @@ async function generateKillmails() {
     }
     console.log(`Read ${sourceKillmails.length} source killmails.`);
 
-    // 2. Read existing PODs and create a set of processed keys
-    const existingPods = await readJsonFile<JSONPOD[]>(OUTPUT_PODS_FILE, []);
-    const processedKeys = new Set<string>(
-        existingPods.map(pod => {
-            // Reconstruct the key from POD entries (adjust field names if needed)
-            // Use specific type assertions for int fields
-            const timestamp = (pod.entries['timestamp'] as { int?: string | number })?.int?.toString() ?? '';
-            const solarSystemId = (pod.entries['solar_system_id'] as { int?: string | number })?.int?.toString() ?? '';
-            // String fields can keep the simpler assertion (or be more specific if needed)
-            const victimAddr = (pod.entries['victim_address'] as { value?: string })?.value?.toString() ?? '';
-            const killerAddr = (pod.entries['killer_address'] as { value?: string })?.value?.toString() ?? '';
-            return `${timestamp}-${solarSystemId}-${victimAddr}-${killerAddr}`;
-        })
-    );
-    console.log(`Found ${existingPods.length} existing killmail PODs (${processedKeys.size} unique keys).`);
+    // 2. Read existing PODs object (keyed by contentId)
+    const existingPodsByContentId = await readJsonFile<{ [contentId: string]: JSONPOD }>(OUTPUT_PODS_FILE, {});
+    console.log(`Read ${Object.keys(existingPodsByContentId).length} existing killmail PODs (keyed by contentId).`);
+    
+    // Remove the previous killmail key reconstruction logic
 
-    // 3. Identify and process new killmails
-    const newPods: JSONPOD[] = [];
+    // 3. Process source killmails, generating only new ones
+    const newPodsToMerge: { [contentId: string]: JSONPOD } = {};
     let processedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
     for (const km of sourceKillmails) {
-        const key = createKillmailKey(km);
-        if (!processedKeys.has(key)) {
-            try {
-                const podEntries = killmailToPODEntries(km);
+        try {
+            const podEntries = killmailToPODEntries(km);
+            // Calculate potential contentId *before* signing
+            const potentialContentId = PODContent.fromEntries(podEntries).contentID.toString();
+
+            // Check if this contentId already exists
+            if (!existingPodsByContentId[potentialContentId]) {
+                // Only sign if it's a new POD
                 const pod = POD.sign(podEntries, privateKey);
-                newPods.push(pod.toJSON());
-                processedCount++;
-                // Add key to set to handle duplicates within the source file if any
-                processedKeys.add(key); 
-            } catch (error: any) {
-                console.error(`Error processing killmail with key ${key}: ${error.message}`);
+                // Sanity check: Ensure calculated contentId matches signed one
+                if (pod.contentID.toString() !== potentialContentId) {
+                     console.warn(`Warning: Calculated contentId ${potentialContentId} mismatch for killmail (ts: ${km.timestamp}, sys: ${km.solar_system_id}). Using signed ID ${pod.contentID.toString()}.`);
+                     // Use the ID from the signed POD if mismatch occurs
+                     newPodsToMerge[pod.contentID.toString()] = pod.toJSON();
+                } else {
+                    newPodsToMerge[potentialContentId] = pod.toJSON();
+                }
+                processedCount++; // Count newly generated PODs
+            } else {
+                skippedCount++; // Count existing PODs skipped
             }
+        } catch (error: any) {
+            console.error(`Error processing killmail (timestamp: ${km.timestamp}, system: ${km.solar_system_id}): ${error.message}`);
+            errorCount++;
         }
     }
 
-    console.log(`Generated ${newPods.length} new killmail PODs.`);
+    console.log(`Processed ${sourceKillmails.length} source killmails. Generated ${processedCount} new PODs. Skipped ${skippedCount} existing PODs. Encountered ${errorCount} errors.`);
 
-    // 4. Append new PODs and write back
-    if (newPods.length > 0) {
-        const updatedPods = [...existingPods, ...newPods];
-        await writeJsonFile(OUTPUT_PODS_FILE, updatedPods);
+    // 4. Merge existing and new PODs and write back
+    if (processedCount > 0) { // Only write if new PODs were generated
+        const finalOutputPods = { ...existingPodsByContentId, ...newPodsToMerge };
+        await writeJsonFile(OUTPUT_PODS_FILE, finalOutputPods);
+        console.log(`Wrote ${Object.keys(finalOutputPods).length} total killmail PODs (keyed by contentId) to file.`);
     } else {
-        console.log('No new killmails to process. Output file remains unchanged.');
+        console.log('No new killmails needed. Output file remains unchanged.');
     }
 
     console.log('Killmail POD generation finished.');

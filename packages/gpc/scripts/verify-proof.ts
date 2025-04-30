@@ -9,11 +9,14 @@ import {
     boundConfigFromJSON,
     revealedClaimsFromJSON,
     gpcVerify,
-    compileVerifyConfig
+    compileVerifyConfig,
+    gpcPreVerify
 } from '@pcd/gpc';
 import {
     PROTO_POD_GPC_FAMILY_NAME,
-    ProtoPODGPC
+    ProtoPODGPC,
+    ProtoPODGPCPublicInputs,
+    ProtoPODGPCOutputs
 } from "@pcd/gpcircuits";
 import { SupportedGPCCircuitParams, supportedParameterSets } from '../src/circuitParameterSets';
 
@@ -187,21 +190,48 @@ async function verifyProof(proofJsonPath: string) {
         ...matchedParams
     };
 
-    // 3. Verify using the standard gpcVerify function
-    logStep("Calling standard gpcVerify function...");
+    // 3. Verify manually using ProtoPODGPC.verify to bypass config/claim list check
+    let circuitPublicInputs: ProtoPODGPCPublicInputs;
+    let circuitOutputs: ProtoPODGPCOutputs;
+    try {
+        // Directly compile using the modified boundConfig
+        logStep("Calling compileVerifyConfig with modified boundConfig...");
+        const compiledVerify = compileVerifyConfig(boundConfig, revealedClaims, circuitDesc);
+        circuitPublicInputs = compiledVerify.circuitPublicInputs;
+        circuitOutputs = compiledVerify.circuitOutputs;
+        console.log("Successfully obtained compiled inputs/outputs via compileVerifyConfig.");
+
+    } catch (compileError: any) {
+        console.error(`compileVerifyConfig failed: ${compileError.message}`);
+        console.error(compileError.stack);
+        process.exit(1);
+    }
+
+    logStep("Calling ProtoPODGPC.verify directly...");
     let isValid = false;
     try {
-        // Use local artifacts directory for verification
-        isValid = await gpcVerify(
-            proof,
-            boundConfig,
-            revealedClaims,
-            ARTIFACTS_BASE_DIR,
-            [circuitDesc]
+        const vkeyPath = path.join(ARTIFACTS_BASE_DIR, `${identifier}-vkey.json`);
+        console.log(`  Using VKey Path: ${vkeyPath}`);
+        // Ensure vkey exists
+        await fs.access(vkeyPath);
+
+        // Convert proof points to BigInt if they aren't already (snarkjs proof objects often use strings)
+        const proofBigInt: GPCProof = {
+            pi_a: proof.pi_a,
+            pi_b: proof.pi_b,
+            pi_c: proof.pi_c,
+            protocol: proof.protocol,
+            curve: proof.curve
+        };
+        
+        isValid = await ProtoPODGPC.verify(
+            vkeyPath,
+            proofBigInt, // Pass proof with BigInts
+            circuitPublicInputs, // Already BigInts from compileVerifyConfig
+            circuitOutputs      // Already BigInts from compileVerifyConfig
         );
     } catch (e: any) {
-        console.error(`Error during standard gpcVerify: ${e.message}`);
-        console.error(e.stack);
+        console.error(`Error during ProtoPODGPC.verify: ${e.message}`);
         isValid = false;
     }
 

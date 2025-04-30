@@ -11,10 +11,8 @@ const POD_DATA_TYPE = 'evefrontier.smart_assembly';
 const FUEL_FIXED_POINT_FACTOR = 1000000000000000000n;
 
 // Define the structure we'll save to the JSON file
-interface StoredPOD {
-    contentId: string;
-    pod: JSONPOD;
-}
+// Remove StoredPOD interface as output is now a direct map
+// interface StoredPOD { ... }
 
 // --- Helper Function: SmartAssembly Detail to PODEntries ---
 // Now takes the detailed assembly object
@@ -103,7 +101,7 @@ function detailedAssemblyToPODEntries(asm: DetailedSmartAssembly): PODEntries {
 
 // --- Main Script ---
 async function generateAssemblies() {
-    console.log('Starting SmartAssembly POD generation from detailed data (Overwrite Strategy)...');
+    console.log('Starting SmartAssembly POD generation (keyed by contentId)...');
     const privateKey = loadPrivateKey();
 
     // 1. Read source assembly details
@@ -117,33 +115,36 @@ async function generateAssemblies() {
     console.log(`Read details for ${assemblyIds.length} assemblies.`);
 
     // 2. Iterate through details and generate PODs
-    const outputAssemblyPods: StoredPOD[] = []; // Output is now an array of StoredPODs
+    // Change output structure to be keyed by contentId
+    const outputPodsByContentId: { [contentId: string]: JSONPOD } = {};
     let assembliesProcessed = 0;
-    
+    let errorCount = 0;
+
     for (const assemblyId of assemblyIds) {
         const asmDetail = assemblyDetails[assemblyId];
-        if (!asmDetail) continue; 
+        if (!asmDetail) continue;
 
         try {
             const podEntries = detailedAssemblyToPODEntries(asmDetail);
-            const contentId = PODContent.fromEntries(podEntries).contentID.toString();
+            // Sign first to get the real POD instance
             const pod = POD.sign(podEntries, privateKey);
+            const contentId = pod.contentID.toString(); // Get contentId as string
             const jsonPod = pod.toJSON();
-            const storedPod: StoredPOD = { contentId: contentId, pod: jsonPod };
-            outputAssemblyPods.push(storedPod);
+            // Store JSONPOD keyed by contentId string
+            outputPodsByContentId[contentId] = jsonPod;
             assembliesProcessed++;
-
         } catch (error: any) {
             console.error(`Error processing assembly detail for ${assemblyId}: ${error.message}`);
+            errorCount++; // Track errors
         }
     }
 
-    console.log(`Processed ${assembliesProcessed} assembly details. Generated ${outputAssemblyPods.length} assembly PODs.`);
+    console.log(`Processed ${assembliesProcessed + errorCount} assembly details. Generated ${assembliesProcessed} assembly PODs. Encountered ${errorCount} errors.`);
 
-    // 3. Overwrite the output file with the generated PODs
-    await writeJsonFile(OUTPUT_PODS_FILE, outputAssemblyPods);
+    // 3. Overwrite the output file with the object keyed by contentId
+    await writeJsonFile(OUTPUT_PODS_FILE, outputPodsByContentId);
 
-    console.log('SmartAssembly POD generation finished (Overwrite).');
+    console.log('SmartAssembly POD generation finished.');
 }
 
 // Run the script

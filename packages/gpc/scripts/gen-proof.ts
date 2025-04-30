@@ -19,21 +19,8 @@ import {
     paramMaxVirtualEntries
 } from "@pcd/gpcircuits";
 import { groth16, Groth16Proof } from "snarkjs";
-import { POD, JSONPOD, podValueFromJSON } from '@pcd/pod';
+import { POD, JSONPOD, podValueFromJSON, PODValue, podValueToJSON } from '@pcd/pod';
 import { readJsonFile, writeJsonFile } from '../../pods/utils/fsUtils'; // Adjust path as needed
-
-// BigInt Reviver for JSON parsing input PODs
-function jsonBigIntReviver(key: string, value: any): any {
-    if (typeof value === 'string' && /^\d+n$/.test(value)) {
-        return BigInt(value.slice(0, -1));
-    }
-    if (typeof value === 'object' && value !== null && value.type === 'bigint' && typeof value.value === 'string') {
-        try {
-            return BigInt(value.value);
-        } catch { /* Ignore */ }
-    }
-    return value;
-}
 
 // Define the base directory for config files (REMOVED)
 // const CONFIGS_BASE_DIR = path.resolve(__dirname, '..', 'proof-configs');
@@ -53,9 +40,8 @@ function logStep(message: string) {
 // Helper to load a TS config file using require
 function loadProofConfig(configPath: string): GPCProofConfig {
     // <<< Resolve path relative to CWD >>>
-    // const absolutePath = path.resolve(process.cwd(), configPath);
-    const absolutePath = configPath; // Assume configPath is already absolute
-    console.log(`Attempting to load config from provided path: ${absolutePath}`);
+    const absolutePath = path.resolve(process.cwd(), configPath);
+    console.log(`Attempting to load config from provided path: ${configPath} (resolved: ${absolutePath})`);
     try {
         const configModule = require(absolutePath);
         const exportKey = Object.keys(configModule)[0];
@@ -263,20 +249,51 @@ async function generateProof(configPath: string, inputsPath: string) {
 
         // 6. Call snarkjs.groth16.fullProve
         logStep("6. Calling snarkjs.groth16.fullProve...");
-        // <<< Stringify BigInts within the circuitInputs object >>>
-        const snarkjsInputs = stringifyBigIntsRecursive(circuitInputs);
-        // console.time("snarkjsProve"); // Optional: time the proving
-        
-        // <<< Add logging before the call >>>
+        // <<< ADD MORE DETAILED LOGGING BEFORE THE CALL >>>
+        console.log("--- DEBUG: Inspecting snarkjsInputs before fullProve ---");
         console.log(`  Using WASM path: ${wasmPath}`);
         console.log(`  Using PKEY path: ${pkeyPath}`);
-        console.log(`  Input keys: ${Object.keys(snarkjsInputs).join(', ')}`); // Log top-level keys
+        console.log(`  Input keys: ${Object.keys(circuitInputs).join(', ')}`);
+        // Log types of a few potentially complex/nested inputs
+        try {
+            console.log(`  Type of objectContentID: ${typeof circuitInputs.objectContentID}, IsArray: ${Array.isArray(circuitInputs.objectContentID)}, Length: ${circuitInputs.objectContentID?.length}`);
+            console.log(`    Type of first element: ${typeof circuitInputs.objectContentID?.[0]}`);
+            console.log(`  Type of entryProofSiblings: ${typeof circuitInputs.entryProofSiblings}, IsArray: ${Array.isArray(circuitInputs.entryProofSiblings)}, Length: ${circuitInputs.entryProofSiblings?.length}`);
+            if (circuitInputs.entryProofSiblings?.length > 0) {
+                 console.log(`    Type of first sibling array: ${typeof circuitInputs.entryProofSiblings[0]}, IsArray: ${Array.isArray(circuitInputs.entryProofSiblings[0])}, Length: ${circuitInputs.entryProofSiblings[0]?.length}`);
+                 if (circuitInputs.entryProofSiblings[0]?.length > 0) {
+                    console.log(`      Type of first element in first sibling array: ${typeof circuitInputs.entryProofSiblings[0][0]}`);
+                 }
+            }
+            console.log(`  Type of numericValues: ${typeof circuitInputs.numericValues}, IsArray: ${Array.isArray(circuitInputs.numericValues)}, Length: ${circuitInputs.numericValues?.length}`);
+            if (circuitInputs.numericValues?.length > 0) {
+                 console.log(`    Type of first numericValue: ${typeof circuitInputs.numericValues[0]}`);
+            }
+            console.log(`  Type of listValidValues: ${typeof circuitInputs.listValidValues}, IsArray: ${Array.isArray(circuitInputs.listValidValues)}, Length: ${circuitInputs.listValidValues?.length}`);
+             if (circuitInputs.listValidValues?.length > 0) {
+                 console.log(`    Type of first listValidValue array: ${typeof circuitInputs.listValidValues[0]}, IsArray: ${Array.isArray(circuitInputs.listValidValues[0])}, Length: ${circuitInputs.listValidValues[0]?.length}`);
+                 if (circuitInputs.listValidValues[0]?.length > 0) {
+                     // Check if the first element is an array (tuples) or a primitive (simple list)
+                     if (Array.isArray(circuitInputs.listValidValues[0][0])) {
+                         console.log(`      Type of first element in first list array (tuple): ${typeof circuitInputs.listValidValues[0][0]}, IsArray: ${Array.isArray(circuitInputs.listValidValues[0][0])}, Length: ${circuitInputs.listValidValues[0][0]?.length}`);
+                         if (circuitInputs.listValidValues[0][0]?.length > 0) {
+                            console.log(`        Type of first value in tuple: ${typeof circuitInputs.listValidValues[0][0][0]}`);
+                         }
+                     } else {
+                         console.log(`      Type of first element in first list array (primitive): ${typeof circuitInputs.listValidValues[0][0]}`);
+                     }
+                 }
+            }
+        } catch (logError: any) {
+            console.error("DEBUG: Error during detailed input logging:", logError.message);
+        }
+        console.log("--- END DEBUG: Inspecting snarkjsInputs ---");
         // For more detail (can be very verbose):
-        // console.log("  Full snarkjs inputs:", JSON.stringify(snarkjsInputs, null, 2));
+        // console.log("  Full snarkjs inputs:", JSON.stringify(circuitInputs, null, 2));
 
         try {
             const { proof, publicSignals } = await groth16.fullProve(
-                snarkjsInputs, // <<< Pass the processed input object directly
+                circuitInputs, // <<< Pass the original circuitInputs object with BigInts >>>
                 wasmPath, 
                 pkeyPath
                 // logger // Optional: pass a logger object if needed
@@ -311,14 +328,29 @@ async function generateProof(configPath: string, inputsPath: string) {
             const finalRevealedClaims = postProveResult.revealedClaims;
             // console.log("gpcPostProve completed successfully.");
             // console.log("Final Revealed Claims:", JSON.stringify(finalRevealedClaims, (k,v)=>typeof v === 'bigint' ? v.toString() + 'n' : v, 2));
-    
+            
+            // +++ DEBUG LOGGING +++
+            if (finalRevealedClaims?.membershipLists?.validKeyIds) {
+                console.log("DEBUG: Type of finalRevealedClaims.membershipLists.validKeyIds:", typeof finalRevealedClaims.membershipLists.validKeyIds, Array.isArray(finalRevealedClaims.membershipLists.validKeyIds));
+                console.log("DEBUG: Content of finalRevealedClaims.membershipLists.validKeyIds:", JSON.stringify(stringifyBigIntsRecursive(finalRevealedClaims.membershipLists.validKeyIds)));
+                if (finalRevealedClaims.membershipLists.validKeyIds.length > 0) {
+                    console.log("DEBUG: Type of first element:", typeof finalRevealedClaims.membershipLists.validKeyIds[0]);
+                }
+            } else {
+                console.log("DEBUG: finalRevealedClaims.membershipLists or .validKeyIds is missing or null.");
+            }
+            // +++ END DEBUG LOGGING +++
+
             // 9. Prepare Final Output Data
             logStep("9. Preparing final output data...");
+
+            // <<< Use original finalRevealedClaims for serialization >>>
             const serializedBoundConfig = boundConfigToJSON(boundConfig);
-            const serializedRevealedClaims = revealedClaimsToJSON(finalRevealedClaims);
-    
+            // <<< Pass the original claims object with PODValue instances >>>
+            const serializedRevealedClaims = revealedClaimsToJSON(finalRevealedClaims); // <<< Use finalRevealedClaims
+
             const outputData = {
-                proof: proof, 
+                proof: proof, // snarkjs proof object is already JSON-compatible
                 boundConfig: serializedBoundConfig,
                 revealedClaims: serializedRevealedClaims
             };
@@ -377,34 +409,104 @@ generateProof(configArg, gpcInputsArg).catch(error => {
 async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs> {
     // logStep("Loading GPC Proof Inputs..."); // Redundant with logStep 1
     // <<< Resolve path relative to CWD >>>
-    // const absolutePath = path.resolve(process.cwd(), proofInputsPath);
-    const absolutePath = proofInputsPath; // Assume proofInputsPath is already absolute
-    // console.log(`Attempting to load GPC inputs from resolved path: ${absolutePath}`);
+    const absolutePath = path.resolve(process.cwd(), proofInputsPath);
+    console.log(`Attempting to load GPC inputs from provided path: ${proofInputsPath} (resolved: ${absolutePath})`);
     try {
         const fileContent = await fs.readFile(absolutePath, 'utf-8');
+        // <<< Parse without custom reviver >>>
         const parsedInputs = JSON.parse(fileContent);
-        if (parsedInputs === null) {
+        if (parsedInputs === null || typeof parsedInputs !== 'object') { // <<< Check for null explicitly
             throw new Error(`Could not read or parse JSON file.`);
         }
 
-        // Manually deserialize PODs using the custom reviver function within JSON.parse
-        const parsedWithBigInt = JSON.parse(fileContent, jsonBigIntReviver);
+        // Manually deserialize PODs
         const deserializedPods: Record<string, POD> = {};
-        if (parsedWithBigInt.pods && typeof parsedWithBigInt.pods === 'object') {
-            for (const key in parsedWithBigInt.pods) {
-                if (Object.prototype.hasOwnProperty.call(parsedWithBigInt.pods, key)) {
+        if (parsedInputs.pods && typeof parsedInputs.pods === 'object') {
+            for (const key in parsedInputs.pods) {
+                if (Object.prototype.hasOwnProperty.call(parsedInputs.pods, key)) {
                     // Assume the value is a valid JSONPOD structure
-                    deserializedPods[key] = POD.fromJSON(parsedWithBigInt.pods[key]);
+                    try {
+                        deserializedPods[key] = POD.fromJSON(parsedInputs.pods[key]);
+                    } catch (podError: any) {
+                         console.error(`Error deserializing POD '${key}': ${podError.message}`);
+                         throw podError;
+                    }
                 }
             }
         } else {
             throw new Error("Parsed input data does not contain a valid 'pods' object.");
         }
 
-        // Reconstruct the GPCProofInputs object
+        // <<< Manually parse membershipLists using podValueFromJSON >>>
+        let deserializedMembershipLists: GPCProofInputs['membershipLists'] = undefined;
+        if (parsedInputs.membershipLists && typeof parsedInputs.membershipLists === 'object') {
+            deserializedMembershipLists = {};
+            for (const listName in parsedInputs.membershipLists) {
+                if (Object.prototype.hasOwnProperty.call(parsedInputs.membershipLists, listName)) {
+                    const jsonList = parsedInputs.membershipLists[listName];
+                    if (!Array.isArray(jsonList)) {
+                        throw new Error(`Membership list '${listName}' is not an array.`);
+                    }
+                    // Map each item in the JSON list using podValueFromJSON
+                    // <<< Add type assertion based on first element >>>
+                    if (jsonList.length > 0 && Array.isArray(jsonList[0])) {
+                        // If the first item is an array, assert the whole list as PODValueTuple[]
+                        deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) => {
+                             try {
+                                // Expecting an array (tuple) here
+                                if (!Array.isArray(jsonItem)) throw new Error('Inconsistent item type in tuple list');
+                                return jsonItem.map((tupleItem, tupleIndex) =>
+                                    podValueFromJSON(tupleItem, `${listName}[${index}][${tupleIndex}]`)
+                                );
+                             } catch (parseError: any) {
+                                 console.error(`Error parsing tuple item ${index} in membership list '${listName}': ${parseError.message}`);
+                                 throw parseError;
+                             }
+                        }) as PODValue[][]; // <<< Assert as tuple list
+                    } else {
+                        // Otherwise, assert the whole list as PODValue[]
+                        deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) => {
+                            try {
+                                // Expecting a single value here
+                                if (Array.isArray(jsonItem)) throw new Error('Inconsistent item type in value list');
+                                return podValueFromJSON(jsonItem, `${listName}[${index}]`);
+                            } catch (parseError: any) {
+                                console.error(`Error parsing value item ${index} in membership list '${listName}': ${parseError.message}`);
+                                throw parseError;
+                            }
+                        }) as PODValue[]; // <<< Assert as value list
+                    }
+                    /* Original version - replaced by typed logic above
+                    deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) => {
+                         try {
+                            // Need to handle tuples (arrays of JSONPODValues) vs single JSONPODValues
+                            if (Array.isArray(jsonItem)) {
+                                // It's a tuple
+                                return jsonItem.map((tupleItem, tupleIndex) =>
+                                    podValueFromJSON(tupleItem, `${listName}[${index}][${tupleIndex}]`)
+                                );
+                            } else {
+                                // It's a single value
+                                return podValueFromJSON(jsonItem, `${listName}[${index}]`);
+                            }
+                         } catch (parseError: any) {
+                             console.error(`Error parsing item ${index} in membership list '${listName}': ${parseError.message}`);
+                             throw parseError;
+                         }
+                    });
+                    */
+                }
+            }
+        }
+        // <<< End Manual Parsing >>>
+
+        // Reconstruct the GPCProofInputs object using deserialized parts
         const proofInputs: GPCProofInputs = {
-            ...parsedWithBigInt,
-            pods: deserializedPods
+            pods: deserializedPods,
+            membershipLists: deserializedMembershipLists, // <<< Use deserialized lists
+            // <<< Need to parse owner and watermark too if they exist and contain PODValues >>>
+            owner: parsedInputs.owner, // Assume owner structure doesn't need deep PODValue parsing for now
+            watermark: parsedInputs.watermark ? podValueFromJSON(parsedInputs.watermark, 'watermark') : undefined // Parse watermark if present
         };
         // console.log("GPC Proof Inputs loaded and deserialized successfully.");
         return proofInputs;

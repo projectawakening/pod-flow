@@ -31,8 +31,13 @@ export async function writeJsonFile<T>(filePath: string, data: T): Promise<void>
     // Ensure directory exists
     const dir = path.dirname(filePath);
     await fs.promises.mkdir(dir, { recursive: true });
-    // Write file
-    await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    // Write file with BigInt replacer
+    const replacer = (key: string, value: any) =>
+      typeof value === 'bigint'
+        ? value.toString() // Convert BigInt to simple string
+        : value; // Return other values unchanged
+
+    await writeFile(filePath, JSON.stringify(data, replacer, 2), 'utf-8');
     console.log(`Successfully wrote data to ${filePath}`);
   } catch (error) {
     console.error(`Error writing file ${filePath}:`, error);

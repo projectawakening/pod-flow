@@ -9,12 +9,6 @@ const SOURCE_SOLARSYSTEMS_FILE = path.join(__dirname, '..', 'game-data', 'solar_
 const OUTPUT_SOLARSYSTEM_PODS_FILE = path.join(__dirname, '..', 'pod-data', 'solar_system_pods.json');
 const POD_DATA_TYPE = 'evefrontier.solar_system';
 
-// Define the structure we expect to read/write for StoredPODs
-interface StoredPOD {
-    contentId: string;
-    pod: JSONPOD;
-}
-
 // --- Helper Function: SolarSystem to PODEntries ---
 function solarSystemToPODEntries(ss: SolarSystem): PODEntries {
     const entries: PODEntries = {};
@@ -72,7 +66,7 @@ function solarSystemToPODEntries(ss: SolarSystem): PODEntries {
 
 // --- Main Script ---
 async function generateSolarSystems() {
-    console.log('Starting SolarSystem POD generation (Overwrite Strategy, using assembly IDs only)...');
+    console.log('Starting SolarSystem POD generation (keyed by contentId)...');
     const privateKey = loadPrivateKey();
 
     // 1. Read source solar systems (contains assemblyIds)
@@ -83,13 +77,14 @@ async function generateSolarSystems() {
     }
     console.log(`Read ${sourceSolarSystems.length} source solar systems.`);
 
-    // 2. Process solar systems, store only assembly IDs
-    const latestSolarSystemPods = new Map<string, StoredPOD>(); 
+    // 2. Process solar systems
+    const latestSolarSystemPodsByContentId = new Map<string, JSONPOD>();
     let processedCount = 0;
+    let errorCount = 0;
 
     for (const ss of sourceSolarSystems) {
         if (ss.timestamp === 0) {
-             console.warn(`Skipping solar system ${ss.solarSystemId} as it has timestamp 0 (updateSolarSystemsAndFetchAssemblies might not have run or failed).`);
+             console.warn(`Skipping solar system ${ss.solarSystemId} as it has timestamp 0.`);
              continue;
         }
         if (!ss.solarSystemId) {
@@ -98,36 +93,32 @@ async function generateSolarSystems() {
         }
 
         try {
-            // Pass only the solar system object now
-            const podEntries = solarSystemToPODEntries(ss); 
-            const contentId = PODContent.fromEntries(podEntries).contentID.toString();
+            const podEntries = solarSystemToPODEntries(ss);
+            // Sign first to get the actual POD instance and contentID
             const pod = POD.sign(podEntries, privateKey);
+            const contentId = pod.contentID.toString();
             const jsonPod = pod.toJSON();
-            const storedPod: StoredPOD = { contentId: contentId, pod: jsonPod };
-
-            latestSolarSystemPods.set(ss.solarSystemId.toString(), storedPod);
-            processedCount++; 
-
+            
+            // Store the latest JSONPOD for each solarSystemId, keyed by contentId
+            // Note: If multiple source entries exist for the same system, the *last* one processed wins here.
+            // If we need the *latest timestamp*, more complex logic would be needed before this loop.
+            latestSolarSystemPodsByContentId.set(contentId, jsonPod);
+            processedCount++;
         } catch (error: any) {
             console.error(`Error processing solar system ${ss.solarSystemId}: ${error.message}`);
+            errorCount++;
         }
     }
 
-    const finalSolarSystemPods = Array.from(latestSolarSystemPods.values());
-    // Optional: Sort the final array for consistency
-    finalSolarSystemPods.sort((a, b) => {
-        const idA = BigInt((a.pod.entries['solarSystemId'] as { int?: string | number })?.int ?? 0n);
-        const idB = BigInt((b.pod.entries['solarSystemId'] as { int?: string | number })?.int ?? 0n);
-        if (idA < idB) return -1;
-        if (idA > idB) return 1;
-        return 0;
-    });
-    console.log(`Processed ${processedCount} source solar systems. Generated ${finalSolarSystemPods.length} final unique solar system PODs (latest state).`);
+    // Convert Map to a plain object for JSON output
+    const finalOutputPods: { [contentId: string]: JSONPOD } = Object.fromEntries(latestSolarSystemPodsByContentId);
 
-    // 4. Overwrite the output file with the latest PODs
-    await writeJsonFile(OUTPUT_SOLARSYSTEM_PODS_FILE, finalSolarSystemPods);
+    console.log(`Processed ${processedCount + errorCount} source solar systems. Generated ${Object.keys(finalOutputPods).length} final unique solar system PODs (keyed by contentId). Encountered ${errorCount} errors.`);
 
-    console.log('SolarSystem POD generation finished (Overwrite, using assembly IDs only).');
+    // 4. Overwrite the output file with the object keyed by contentId
+    await writeJsonFile(OUTPUT_SOLARSYSTEM_PODS_FILE, finalOutputPods);
+
+    console.log('SolarSystem POD generation finished.');
 }
 
 // Run the script

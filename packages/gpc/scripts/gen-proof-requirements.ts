@@ -2,7 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import {
   GPCProofConfig,
-  GPCProofInputs,  // Need the input type
+  GPCProofInputs,
+  PODMembershipLists,
 } from '@pcd/gpc';
 import {
   POD, 
@@ -21,12 +22,14 @@ import {
   POD_INT_MAX,
   POD_NAME_REGEX,
   encodePublicKey,
-  EDDSA_PUBKEY_TYPE_STRING
+  EDDSA_PUBKEY_TYPE_STRING,
 } from '@pcd/pod';
 import isEqual from 'lodash/isEqual';
 import uniq from 'lodash/uniq';
 import min from 'lodash/min';
 import max from 'lodash/max';
+// Try importing the owner type from semaphore-group-signal
+// import { PCDSemaphoreGroupSignal } from '@pcd/semaphore-group-signal';
 
 // Base directory constants (optional but good practice)
 // const CONFIGS_BASE_DIR = path.resolve(__dirname, '..', 'proof-configs');
@@ -44,6 +47,13 @@ interface GPCRequirements {
     tupleArities: Record<string, number>; 
     includeOwnerV3: boolean;
     includeOwnerV4: boolean;
+}
+
+// +++ Define Local Interface for Owner Input +++
+interface GPCOwnerInput {
+  semaphoreV3?: { commitment: bigint };
+  semaphoreV4?: { publicKey: [bigint, bigint] }; // Based on checkProofInputsLocal
+  externalNullifier?: PODValue;
 }
 
 // +++ START COPIED LOGIC from @pcd/gpc +++
@@ -643,112 +653,123 @@ function toJson(data: any): string {
   );
 }
 
-// BigInt Reviver for JSON parsing input PODs
+// BigInt Reviver for parsing GPC inputs JSON file
+// Needed because GPCProofInputs object might contain BigInts (e.g., in membershipLists)
+// which are stringified by writeJsonFile.
 function jsonBigIntReviver(key: string, value: any): any {
-    if (typeof value === 'string' && /^\d+n$/.test(value)) {
-        return BigInt(value.slice(0, -1));
+    // Handles simple stringified bigints ONLY for known non-POD fields or array elements (membership lists)
+    if (typeof value === 'string' && /^\d+$/.test(value)) {
+         try {
+             // Check specific known keys (e.g., Semaphore V3 commitment)
+             if (key === 'commitment') {
+                return BigInt(value);
+             }
+             // Check if it's an element within a membership list array (index key)
+             if (key.match(/^\d+$/)) { 
+                 return BigInt(value);
+             }
+         } catch { /* Ignore */ }
     }
-    if (typeof value === 'object' && value !== null && value.type === 'bigint' && typeof value.value === 'string') {
-        try {
-            return BigInt(value.value);
-        } catch { /* Ignore */ }
+    // Handles Semaphore V4 public key format
+    if (key === 'publicKey' && Array.isArray(value) && value.length === 2 && typeof value[0] === 'string' && typeof value[1] === 'string') {
+        try { return [BigInt(value[0]), BigInt(value[1])] as [bigint, bigint]; } catch { /* Ignore */ }
     }
+    
+    // IMPORTANT: Do NOT interfere with PODValue structures here. 
+    // Let subsequent processing handle them based on their 'type' field.
+    // Specifically, do NOT revive `{ type: 'int', value: 'stringified_bigint' }` here.
+
     return value;
 }
 
 // Main script logic
-async function generateRequirementsData(configFilePath: string, inputPodsFilePath: string) {
-  console.log(`Generating requirements data using config: ${configFilePath}`); // Keep this initial log
-  // console.log(`Using input PODs file: ${inputPodsFilePath}`); // This part is redundant
+// Restore arguments for config path and inputs path
+async function generateRequirementsData(configFilePath: string, gpcInputsFilePath: string) {
+  console.log(`Generating requirements data using config: ${configFilePath}`);
+  console.log(`Using GPC inputs file: ${gpcInputsFilePath}`);
 
-  if (!configFilePath || !inputPodsFilePath) {
-    console.error("Error: Both config path and input PODs path arguments are required.");
-    console.error(`Usage: ts-node ${path.basename(__filename)} <path/to/config.ts> <path/to/input_pods.json>`);
-    // Clarify only where the config file is expected
-    console.error(`       (Config file assumed to be within ${PROOF_REQUIREMENTS_BASE_DIR})`);
+  // Restore check for both arguments
+  if (!configFilePath || !gpcInputsFilePath) {
+    console.error("Error: Both config path and GPC inputs file path arguments are required.");
+    // Restore usage message
+    console.error(`Usage: ts-node ${path.basename(__filename)} <path/to/config.ts> <path/to/your_gpc_inputs.json>`);
     process.exit(1);
   }
 
-  // --- Load Config ---
-  // Use the provided configFilePath directly, resolving it relative to CWD
+  // --- Load GPCProofConfig --- 
   const absoluteConfigPath = path.resolve(process.cwd(), configFilePath);
-  const configFileName = path.basename(absoluteConfigPath); // Get filename for logging/output if needed
-  // console.log(`Attempting to load config from resolved path: ${absoluteConfigPath}`);
+  const configFileName = path.basename(absoluteConfigPath); // Get config filename for output naming
   let proofConfig: GPCProofConfig;
+  console.log(`Attempting to load config from: ${absoluteConfigPath}`);
   try {
-    const configModule = require(absoluteConfigPath); // require the correctly resolved path
+    const configModule = require(absoluteConfigPath);
     const exportKey = Object.keys(configModule)[0];
     proofConfig = configModule[exportKey];
     if (!proofConfig || !proofConfig.pods) {
         throw new Error(`Could not find exported config with a 'pods' property.`);
     }
-     // console.log(`Successfully loaded config: ${exportKey}`);
+    console.log(`Successfully loaded config: ${exportKey}`);
   } catch (error: any) {
     console.error(`Error loading proof config from ${absoluteConfigPath}: ${error.message}`);
-    console.error(error.stack);
     process.exit(1);
   }
 
-  // --- Load and Deserialize Input PODs ---
-  // Use the provided input PODs path directly. Resolve it relative to CWD if it's not absolute.
-  const absoluteInputPodsPath = path.resolve(process.cwd(), inputPodsFilePath); // Resolve against CWD
-  // console.log(`Attempting to load and deserialize input PODs directly from: ${absoluteInputPodsPath}`);
+  // --- Load GPC Proof Inputs File ---
+  const absoluteGpcInputsPath = path.resolve(process.cwd(), gpcInputsFilePath);
   let proofInputs: GPCProofInputs;
+  console.log(`Attempting to load GPC inputs from: ${absoluteGpcInputsPath}`);
   try {
-      // Use the resolved absolute path
-      const inputFileContent = await fs.readFile(absoluteInputPodsPath, 'utf-8');
-      // Parse the input file as an ARRAY of JSON PODs
-      const inputPodsJSON: JSONPOD[] = JSON.parse(inputFileContent, jsonBigIntReviver);
-      
-      // Verify count matches config
-      const configPodKeys = Object.keys(proofConfig.pods);
-      if (inputPodsJSON.length !== configPodKeys.length) {
-          throw new Error(`Number of PODs in input file (${inputPodsJSON.length}) does not match config (${configPodKeys.length}).`);
+      const inputFileContent = await fs.readFile(absoluteGpcInputsPath, 'utf-8');
+      const parsedInputs = JSON.parse(inputFileContent, jsonBigIntReviver);
+      if (typeof parsedInputs !== 'object' || parsedInputs === null || !parsedInputs.pods) {
+          throw new Error("GPC inputs file content must be a JSON object with a 'pods' property.");
       }
-
-      // Create the mappedPods record by deserializing
       const mappedPods: Record<string, POD> = {};
-      for (let i = 0; i < configPodKeys.length; i++) {
-          const podKey = configPodKeys[i];
-          const jsonPod = inputPodsJSON[i];
-          try {
-              mappedPods[podKey] = POD.fromJSON(jsonPod);
-          } catch (deserializeError: any) {
-              throw new Error(`Failed to deserialize POD at index ${i} (for key '${podKey}'): ${deserializeError.message}`);
+      if (typeof parsedInputs.pods === 'object' && parsedInputs.pods !== null) {
+          for (const podKey in parsedInputs.pods) {
+              try {
+                  mappedPods[podKey] = POD.fromJSON(parsedInputs.pods[podKey] as JSONPOD);
+              } catch (deserializeError: any) {
+                  throw new Error(`Failed to deserialize POD for key '${podKey}': ${deserializeError.message}`);
+              }
           }
       }
-      
-      // Now construct the GPCProofInputs object correctly
       proofInputs = {
-          pods: mappedPods
-          // Add owner/watermark/lists here if they were loaded from elsewhere
+          pods: mappedPods,
+          membershipLists: parsedInputs.membershipLists as PODMembershipLists | undefined,
+          owner: parsedInputs.owner as any, // Use 'any' as before
+          watermark: parsedInputs.watermark as PODValue | undefined
       };
-      // console.log(`Successfully loaded and deserialized ${configPodKeys.length} PODs.`);
-
+      console.log("Successfully loaded and parsed GPC inputs file.");
   } catch (error: any) {
-      console.error(`Error loading/deserializing input PODs file ${absoluteInputPodsPath}: ${error.message}`);
+      console.error(`Error loading/parsing GPC inputs file ${absoluteGpcInputsPath}: ${error.message}`);
       process.exit(1);
   }
 
-  // --- Call the LOCAL checkProofArgs function ---
-  // console.log("Calling LOCAL checkProofArgs to determine actual requirements...");
+  // Remove inferred config name logic
+  // const inputsBaseName = ... 
+
+  // --- Calculate Requirements using checkProofArgsLocal ---
+  console.log("Validating inputs against config and calculating final requirements...");
   let requirements: GPCRequirements;
   try {
-      requirements = checkProofArgsLocal(proofConfig, proofInputs); // Call the copied version
-      // console.log("LOCAL checkProofArgs call completed successfully.");
+      // Call the main check function which validates config, inputs, and their correspondence
+      requirements = checkProofArgsLocal(proofConfig, proofInputs);
+      console.log("Validation and requirement calculation completed successfully.");
   } catch (error: any) {
-      console.error(`Error running LOCAL checkProofArgs: ${error.message}`);
-      console.error("Check compatibility between config and inputs.");
+      // Errors from here likely indicate incompatibility between config and inputs
+      console.error(`Error running checkProofArgsLocal: ${error.message}`);
+      console.error("Check compatibility between the loaded config and inputs.");
       console.error(error.stack);
       process.exit(1);
   }
 
   // --- Log Final Requirements ---
-  // console.log("Final Requirements (from LOCAL checkProofArgs):"); // Logged before write
-  // console.log(toJson(requirements));
+  // ... (no changes) ...
 
   // --- Write Output ---
   const outputDir = PROOF_REQUIREMENTS_BASE_DIR;
+  // Use the *config* base name for the output requirements file
   const outputFileNameBase = path.basename(configFileName, path.extname(configFileName));
   const outputPath = path.join(outputDir, `${outputFileNameBase}_requirements.json`);
 
@@ -756,11 +777,9 @@ async function generateRequirementsData(configFilePath: string, inputPodsFilePat
 
   try {
     await fs.mkdir(outputDir, { recursive: true });
-    const outputJson = toJson(requirements); // Use helper here too
-    console.log("Calculated Requirements:", outputJson); // Log the final object before writing
+    const outputJson = toJson(requirements);
+    console.log("Calculated Requirements:", outputJson);
     await fs.writeFile(outputPath, outputJson, 'utf-8');
-    // console.log(`Successfully wrote requirements data to ${outputPath}`); // Redundant with logStep
-
   } catch (error: any) {
     console.error(`[Caught Error] Error writing requirements data to ${outputPath}: ${error.message}`);
     console.error(error.stack);
@@ -770,10 +789,12 @@ async function generateRequirementsData(configFilePath: string, inputPodsFilePat
 
 // --- Script Execution ---
 const args = process.argv.slice(2);
-const configArg = args[0]; // Expects path to config (within configs dir eventually)
-const inputPodsArg = args[1]; // Expects path to PODs (anywhere)
+// Restore arguments
+const configArg = args[0]; // Expects path to config file
+const gpcInputsFileArg = args[1]; // Expects path to the _gpc_inputs.json file
 
-generateRequirementsData(configArg, inputPodsArg).catch(error => {
+// Pass both arguments
+generateRequirementsData(configArg, gpcInputsFileArg).catch(error => {
   console.error("Unhandled error during script execution:", error);
   process.exit(1);
 }); 

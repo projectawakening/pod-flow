@@ -1,37 +1,6 @@
 {
-  "gpc_3o-26e": {
-    "file": "proto-pod-gpc",
-    "template": "ProtoPODGPC",
-    "params": [
-      3,
-      26,
-      6,
-      2,
-      1,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ]
-  },
-  "1o-11e-5md-0nv-0ei-0x0l-0x0t-0ov3-0ov4": {
-    "template": "ProtoPODGPC",
-    "params": [
-      1,
-      11,
-      5,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "file": "proto-pod-gpc",
+  "4o-51e-5md-1nv-0ei-1x3l-0x0t-0ov3-0ov4": {
+    "file": "/Users/socrates/ccp/pod-flow/packages/gpc/tmp-compile/4o-51e-5md-1nv-0ei-1x3l-0x0t-0ov3-0ov4/wrapper_4o-51e-5md-1nv-0ei-1x3l-0x0t-0ov3-0ov4.circom",
     "pubs": [
       "entryObjectIndex",
       "entryNameHash",

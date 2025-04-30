@@ -1,0 +1,95 @@
+{
+  "pods": {
+    "1001484157626409149441397299227083644234222668429377436234716790412650319354": {
+      "entries": {
+        "attr_categoryID": 17,
+        "attr_categoryName": "Commodity",
+        "attr_groupID": 4475,
+        "attr_groupName": "License",
+        "attr_icon": "ico73193.png",
+        "attr_mass": 0,
+        "attr_portionSize": 1,
+        "attr_radius": 100000,
+        "attr_typeID": 73193,
+        "attr_volume": 100,
+        "description": "A key containing a dedicated access algorithm, that unlocks the stargate to Frontier.\r\n\r\nOnce built and while docked in station, initiate Gate access by right-clicking the item and selecting 'Activate'.",
+        "name": "Bridgehead 08 Key",
+        "pod_data_type": "evefrontier.item_type",
+        "smartItemId": "76281450467568561225228285979214178292013849431680297308772245460890745965450",
+        "timestamp": 1745949456282,
+        "typeId": 73193
+      },
+      "signature": "7Y3vcyAAMMem6tY9cz3PKa4WdOJU8Kt0bfWl4U3RJxl1wpPfCECaZR0eWN0QcenXthdrN7a3ZKelnAhsB8RXAw",
+      "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+    },
+    "7498544310441122610056993076400687774490580759380713035052166126355533842513": {
+      "entries": {
+        "attr_categoryID": 17,
+        "attr_categoryName": "Commodity",
+        "attr_groupID": 4475,
+        "attr_groupName": "License",
+        "attr_icon": "ico83580.png",
+        "attr_mass": 0,
+        "attr_portionSize": 1,
+        "attr_radius": 100000,
+        "attr_typeID": 83580,
+        "attr_volume": 100,
+        "description": "A key containing a dedicated access algorithm, that unlocks the stargate to Frontier.\r\n\r\nOnce built and while docked in station, initiate Gate access by right-clicking the item and selecting 'Activate'.",
+        "name": "Bridgehead 86 Key",
+        "pod_data_type": "evefrontier.item_type",
+        "smartItemId": "100817554904172780756246872964931265089476895040041059133679899142722811599896",
+        "timestamp": 1745949478852,
+        "typeId": 83580
+      },
+      "signature": "/d0LTTv+RKckSReuFQnusapRaLSW9UB8GDAOW4GHEQq/aJUTwDp8QZZIH7h3IdI1E58N2fIFn7O7HrKJ8AvFAQ",
+      "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+    },
+    "20399640330899955750583753457400439384634649542883722281792995701699261935303": {
+      "entries": {
+        "attr_categoryID": 17,
+        "attr_categoryName": "Commodity",
+        "attr_groupID": 4475,
+        "attr_groupName": "License",
+        "attr_icon": "ico83581.png",
+        "attr_mass": 0,
+        "attr_portionSize": 1,
+        "attr_radius": 100000,
+        "attr_typeID": 83581,
+        "attr_volume": 100,
+        "description": "A key containing a dedicated access algorithm, that unlocks the stargate to Frontier.\r\n\r\nOnce built and while docked in station, initiate Gate access by right-clicking the item and selecting 'Activate'.",
+        "name": "Bridgehead 37 Key",
+        "pod_data_type": "evefrontier.item_type",
+        "smartItemId": "59851142595006604951123531136670176431098563033208717904123815831531896541489",
+        "timestamp": 1745949478937,
+        "typeId": 83581
+      },
+      "signature": "250D9vmYKJzkjlj9AYb1CUWuiS2KE6Uo07/mamAsHInX1Wx/T8/TP8ZmwISvQ6XUIbwz7QagHWlApsEiG53nAg",
+      "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+    },
+    "21482548181568179586165623177601030419318008484263411260780208995254589865893": {
+      "entries": {
+        "itemTypeId": 83581,
+        "keyItemIds": "[73193,83580,83581]",
+        "pod_data_type": "evefrontier.inventory_verification",
+        "quantity": 1,
+        "shipId": "13327362398098557736610075048873622929184977616492775854636077714904855967106",
+        "timestamp": 1746009875471
+      },
+      "signature": "InuWhh1L0+mk0n6Um/BvKkOTza8LILk506sgyeEfla8d1PSrm5qldSrhQKgnRkNwBJSFXrvvkN64HVHemBq6Aw",
+      "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+    }
+  },
+  "podConfigMapping": {
+    "keyItem1": "1001484157626409149441397299227083644234222668429377436234716790412650319354",
+    "keyItem2": "7498544310441122610056993076400687774490580759380713035052166126355533842513",
+    "keyItem3": "20399640330899955750583753457400439384634649542883722281792995701699261935303",
+    "inventory": "21482548181568179586165623177601030419318008484263411260780208995254589865893"
+  },
+  "membershipLists": {
+    "validKeyIds": [
+      73193,
+      83580,
+      83581
+    ]
+  }
+}

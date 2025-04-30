@@ -20,3 +20,6 @@ packages/gpc/proofs/
 
 # Generated proof output folders
 **/proof-output/
+
+# Generated example data
+packages/examples/**/proof-output/

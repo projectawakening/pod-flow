@@ -3,11 +3,14 @@
   "version": "0.0.1",
   "license": "MIT",
   "private": true,
-  "description": "Package for generating mock PODs, and a GPC proofs for various examples.",
+  "description": "Package for generating mock PODs, and a GPC proofs for various examples/use cases.",
   "scripts": {
-    "generate-location-pods": "ts-node location-bounding/scripts/generateMockLocationPods.ts",
-    "generate-distance-proof": "ts-node location-bounding/scripts/generateDistanceProof.ts",
-    "run-location-bounded-mock": "pnpm run generate-location-pods && pnpm run generate-distance-proof ./location-bounding/proof-configs/distanceProofConfig.ts ./location-bounding/pod-data/location_pods.json"
+    "location:gen-pods": "ts-node location-bounding/scripts/generateMockLocationPods.ts",
+    "location:gen-distance-proof": "ts-node location-bounding/scripts/generateDistanceProof.ts",
+    "location:run-mock": "pnpm run location:gen-pods && pnpm run location:gen-distance-proof ./location-bounding/proof-configs/distanceProofConfig.ts ./location-bounding/pod-data/location_pods.json",
+    "item:gen-key-master-params": "ts-node item-types/scripts/generateKeyMasterParams.ts",
+    "item:gen-key-master-proof": "ts-node item-types/scripts/generateKeyMasterProof.ts ./item-types/proof-configs/keyMasterProofConfig.ts ./item-types/pod-data/key_master_params.json",
+    "item:run-mock": "pnpm run item:gen-key-master-params && ts-node item-types/scripts/generateKeyMasterParams.ts && pnpm run item:gen-key-master-proof"
   },
   "dependencies": {
     "@pcd/gpc": "^0.4.0",
