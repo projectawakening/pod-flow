@@ -10,6 +10,7 @@
 /packages/gpc/ptau/*
 
 # Generated GPC files
+packages/gpc/artifacts/
 packages/gpc/proof-inputs/
 packages/gpc/proof-requirements/
 packages/gpc/proofs/

@@ -8,7 +8,7 @@ const POD_INT_MIN = -(1n << 63n);
 const POD_INT_MAX = (1n << 63n) - 1n;
 
 // Define the GPC Proof Configuration for Distance Verification
-export const lcoationProofConfig : GPCProofConfig = {
+export const locationProofConfig : GPCProofConfig = {
   pods: {
     // 1. Object POD (The object being interacted with, e.g., an assembly)
     object: {
