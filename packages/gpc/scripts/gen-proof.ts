@@ -7,8 +7,6 @@ import {
     revealedClaimsToJSON,
     GPCIdentifier,
     ProtoPODGPCCircuitDesc,
-    GPCBoundConfig,
-    GPCRevealedClaims,
     gpcPreProve,
     gpcPostProve
 } from '@pcd/gpc';
@@ -18,18 +16,12 @@ import {
     ProtoPODGPC,
     paramMaxVirtualEntries
 } from "@pcd/gpcircuits";
-import { groth16, Groth16Proof } from "snarkjs";
-import { POD, JSONPOD, podValueFromJSON, PODValue, podValueToJSON } from '@pcd/pod';
+import { groth16 } from "snarkjs";
+import { POD, podValueFromJSON, PODValue } from '@pcd/pod';
 import { readJsonFile, writeJsonFile } from '../../pods/utils/fsUtils'; // Adjust path as needed
 
-// Define the base directory for config files (REMOVED)
-// const CONFIGS_BASE_DIR = path.resolve(__dirname, '..', 'proof-configs');
-// Define the base directory for GPC input files (REMOVED)
-// const PROOF_INPUTS_BASE_DIR = path.resolve(__dirname, '..', 'proof-inputs');
 // Define the base directory for artifacts (needed by gpcVerify)
 const ARTIFACTS_BASE_DIR = path.resolve(__dirname, '..', 'artifacts');
-// Define a temporary directory for intermediate files (REMOVED - Unused)
-// const TMP_DIR = path.resolve(__dirname, '..', 'tmp');
 
 // --- Helper Functions ---
 
@@ -57,8 +49,7 @@ function loadProofConfig(configPath: string): GPCProofConfig {
     }
 }
 
-// REINSTATE: Helper to load the circuit requirements JSON
-// Use the specific type ProtoPODGPCCircuitParams
+// Helper to load the circuit requirements JSON
 async function loadCircuitRequirements(configName: string): Promise<ProtoPODGPCCircuitParams> {
     const requirementsFilename = `${configName}_requirements.json`;
     const requirementsPath = path.resolve(__dirname, '..', 'proof-requirements', requirementsFilename);
@@ -161,7 +152,6 @@ async function generateProof(configPath: string, inputsPath: string) {
         logStep("1. Loading Proof Config and Inputs...");
         const proofConfig = loadProofConfig(configPath);
         const proofInputs = await loadProofInputs(inputsPath);
-        // console.log("Config and Inputs loaded successfully.");
 
         // 2. Load Requirements and Construct Circuit Description
         logStep("2. Loading requirements and constructing circuit description...");
@@ -202,9 +192,7 @@ async function generateProof(configPath: string, inputsPath: string) {
             ...requirements // Spread the loaded requirements
         };
         const circuitIdentifier = `${circuitDesc.family}_${circuitDesc.name}`;
-        // console.log(`Constructed Circuit Description for Identifier: ${circuitIdentifier}`);
-        // console.log("Circuit Description:", circuitDesc);
-
+  
         // Check if circuitDesc is valid before proceeding
         if (!circuitDesc) {
              throw new Error("Failed to construct circuit description."); // Should not happen if requirements load
@@ -212,8 +200,7 @@ async function generateProof(configPath: string, inputsPath: string) {
 
         // <<< Add circuitIdentifier to proofConfig >>>
         proofConfig.circuitIdentifier = circuitIdentifier as GPCIdentifier; // <<< Type assertion
-        // console.log(`Added circuitIdentifier to proofConfig: ${proofConfig.circuitIdentifier}`);
-
+  
         // 3. Call gpcPreProve
         logStep("3. Calling gpcPreProve...");
         const preProveResult = gpcPreProve(proofConfig, proofInputs, [circuitDesc]); 
@@ -224,7 +211,6 @@ async function generateProof(configPath: string, inputsPath: string) {
             // Use the one from preProveResult for consistency downstream
             circuitDesc = preProveResult.circuitDesc; 
         }
-        // console.log("gpcPreProve completed successfully.");
 
         // 4. Define Artifact Paths (using the confirmed circuitDesc/identifier)
         const currentCircuitIdentifier = `${circuitDesc.family}_${circuitDesc.name}`;
@@ -232,8 +218,6 @@ async function generateProof(configPath: string, inputsPath: string) {
         const artifactsPath = ARTIFACTS_BASE_DIR; // Base directory
         const wasmPath = path.join(artifactsPath, `${currentCircuitIdentifier}.wasm`);
         const pkeyPath = path.join(artifactsPath, `${currentCircuitIdentifier}-pkey.zkey`);
-        // console.log(`  Wasm Path: ${wasmPath}`);
-        // console.log(`  Pkey Path: ${pkeyPath}`);
 
         // Check if artifacts exist
         try {
@@ -249,47 +233,6 @@ async function generateProof(configPath: string, inputsPath: string) {
 
         // 6. Call snarkjs.groth16.fullProve
         logStep("6. Calling snarkjs.groth16.fullProve...");
-        // <<< ADD MORE DETAILED LOGGING BEFORE THE CALL >>>
-        console.log("--- DEBUG: Inspecting snarkjsInputs before fullProve ---");
-        console.log(`  Using WASM path: ${wasmPath}`);
-        console.log(`  Using PKEY path: ${pkeyPath}`);
-        console.log(`  Input keys: ${Object.keys(circuitInputs).join(', ')}`);
-        // Log types of a few potentially complex/nested inputs
-        try {
-            console.log(`  Type of objectContentID: ${typeof circuitInputs.objectContentID}, IsArray: ${Array.isArray(circuitInputs.objectContentID)}, Length: ${circuitInputs.objectContentID?.length}`);
-            console.log(`    Type of first element: ${typeof circuitInputs.objectContentID?.[0]}`);
-            console.log(`  Type of entryProofSiblings: ${typeof circuitInputs.entryProofSiblings}, IsArray: ${Array.isArray(circuitInputs.entryProofSiblings)}, Length: ${circuitInputs.entryProofSiblings?.length}`);
-            if (circuitInputs.entryProofSiblings?.length > 0) {
-                 console.log(`    Type of first sibling array: ${typeof circuitInputs.entryProofSiblings[0]}, IsArray: ${Array.isArray(circuitInputs.entryProofSiblings[0])}, Length: ${circuitInputs.entryProofSiblings[0]?.length}`);
-                 if (circuitInputs.entryProofSiblings[0]?.length > 0) {
-                    console.log(`      Type of first element in first sibling array: ${typeof circuitInputs.entryProofSiblings[0][0]}`);
-                 }
-            }
-            console.log(`  Type of numericValues: ${typeof circuitInputs.numericValues}, IsArray: ${Array.isArray(circuitInputs.numericValues)}, Length: ${circuitInputs.numericValues?.length}`);
-            if (circuitInputs.numericValues?.length > 0) {
-                 console.log(`    Type of first numericValue: ${typeof circuitInputs.numericValues[0]}`);
-            }
-            console.log(`  Type of listValidValues: ${typeof circuitInputs.listValidValues}, IsArray: ${Array.isArray(circuitInputs.listValidValues)}, Length: ${circuitInputs.listValidValues?.length}`);
-             if (circuitInputs.listValidValues?.length > 0) {
-                 console.log(`    Type of first listValidValue array: ${typeof circuitInputs.listValidValues[0]}, IsArray: ${Array.isArray(circuitInputs.listValidValues[0])}, Length: ${circuitInputs.listValidValues[0]?.length}`);
-                 if (circuitInputs.listValidValues[0]?.length > 0) {
-                     // Check if the first element is an array (tuples) or a primitive (simple list)
-                     if (Array.isArray(circuitInputs.listValidValues[0][0])) {
-                         console.log(`      Type of first element in first list array (tuple): ${typeof circuitInputs.listValidValues[0][0]}, IsArray: ${Array.isArray(circuitInputs.listValidValues[0][0])}, Length: ${circuitInputs.listValidValues[0][0]?.length}`);
-                         if (circuitInputs.listValidValues[0][0]?.length > 0) {
-                            console.log(`        Type of first value in tuple: ${typeof circuitInputs.listValidValues[0][0][0]}`);
-                         }
-                     } else {
-                         console.log(`      Type of first element in first list array (primitive): ${typeof circuitInputs.listValidValues[0][0]}`);
-                     }
-                 }
-            }
-        } catch (logError: any) {
-            console.error("DEBUG: Error during detailed input logging:", logError.message);
-        }
-        console.log("--- END DEBUG: Inspecting snarkjsInputs ---");
-        // For more detail (can be very verbose):
-        // console.log("  Full snarkjs inputs:", JSON.stringify(circuitInputs, null, 2));
 
         try {
             const { proof, publicSignals } = await groth16.fullProve(
@@ -299,12 +242,7 @@ async function generateProof(configPath: string, inputsPath: string) {
                 // logger // Optional: pass a logger object if needed
             );
             console.log("groth16.fullProve call completed successfully.");
-        
-            // console.timeEnd("snarkjsProve"); // Optional: end timing
-            // console.log("snarkjs.groth16.fullProve completed successfully."); // Covered by logStep
-            // console.log("Raw Proof:", JSON.stringify(proof));
-            // console.log("Raw Public Signals:", publicSignals);
-    
+
             // 7. Reconstruct Circuit Outputs for gpcPostProve
             logStep("7. Reconstructing circuit outputs from public signals...");
             const circuitOutputs = ProtoPODGPC.outputsFromPublicSignals(
@@ -314,8 +252,7 @@ async function generateProof(configPath: string, inputsPath: string) {
                 circuitDesc.includeOwnerV3,
                 circuitDesc.includeOwnerV4
             );
-            // console.log("Circuit outputs reconstructed.");
-    
+
             // 8. Call gpcPostProve
             logStep("8. Calling gpcPostProve...");
             const postProveResult = gpcPostProve(
@@ -326,20 +263,6 @@ async function generateProof(configPath: string, inputsPath: string) {
                 circuitOutputs
             );
             const finalRevealedClaims = postProveResult.revealedClaims;
-            // console.log("gpcPostProve completed successfully.");
-            // console.log("Final Revealed Claims:", JSON.stringify(finalRevealedClaims, (k,v)=>typeof v === 'bigint' ? v.toString() + 'n' : v, 2));
-            
-            // +++ DEBUG LOGGING +++
-            if (finalRevealedClaims?.membershipLists?.validKeyIds) {
-                console.log("DEBUG: Type of finalRevealedClaims.membershipLists.validKeyIds:", typeof finalRevealedClaims.membershipLists.validKeyIds, Array.isArray(finalRevealedClaims.membershipLists.validKeyIds));
-                console.log("DEBUG: Content of finalRevealedClaims.membershipLists.validKeyIds:", JSON.stringify(stringifyBigIntsRecursive(finalRevealedClaims.membershipLists.validKeyIds)));
-                if (finalRevealedClaims.membershipLists.validKeyIds.length > 0) {
-                    console.log("DEBUG: Type of first element:", typeof finalRevealedClaims.membershipLists.validKeyIds[0]);
-                }
-            } else {
-                console.log("DEBUG: finalRevealedClaims.membershipLists or .validKeyIds is missing or null.");
-            }
-            // +++ END DEBUG LOGGING +++
 
             // 9. Prepare Final Output Data
             logStep("9. Preparing final output data...");
@@ -357,7 +280,6 @@ async function generateProof(configPath: string, inputsPath: string) {
     
             // 10. Save Output
             const outputCircuitName = circuitDesc.name; // Use name from desc
-            const inputsBaseName = path.basename(inputsPath, path.extname(inputsPath)).replace('_gpc_inputs', ''); 
             const outputFilename = `${configBaseName}_${outputCircuitName}_proof.json`; 
             const outputDir = path.join(__dirname, '..', 'proofs');
             const outputPath = path.join(outputDir, outputFilename);
@@ -365,13 +287,16 @@ async function generateProof(configPath: string, inputsPath: string) {
     
             await fs.mkdir(outputDir, { recursive: true });
             await writeJsonFile(outputPath, outputData); // writeJsonFile handles BigInts via default JSON.stringify
-            // console.log("Output saved successfully.");
-    
+  
             // <<< Add explicit exit on success >>>
             process.exit(0);
         } catch (snarkError: any) {
             console.error("\n--- ERROR during snarkjs.groth16.fullProve --- ");
             console.error("Message:", snarkError.message);
+            // Check if the error message hints at memory issues
+            if (snarkError.message && (snarkError.message.includes('heap out of memory') || snarkError.message.includes('allocation failed'))) {
+                 console.error("Hint: This often indicates insufficient memory. Try increasing the value of NODE_OPTIONS=--max-old-space-size=<memory_in_mb> when running the script.");
+            }
             console.error("Stack:", snarkError.stack);
             // Re-throw the error to be caught by the outer try-catch which exits the process
             throw snarkError;
@@ -386,7 +311,6 @@ async function generateProof(configPath: string, inputsPath: string) {
         // logStep("Proof generation process finished."); // Redundant
     }
 
-    // logStep("--- GPC Proof Generation Complete (Manual Flow) ---"); // Redundant
 }
 
 // --- Script Execution ---
@@ -407,7 +331,6 @@ generateProof(configArg, gpcInputsArg).catch(error => {
 });
 
 async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs> {
-    // logStep("Loading GPC Proof Inputs..."); // Redundant with logStep 1
     // <<< Resolve path relative to CWD >>>
     const absolutePath = path.resolve(process.cwd(), proofInputsPath);
     console.log(`Attempting to load GPC inputs from provided path: ${proofInputsPath} (resolved: ${absolutePath})`);
@@ -476,25 +399,6 @@ async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs>
                             }
                         }) as PODValue[]; // <<< Assert as value list
                     }
-                    /* Original version - replaced by typed logic above
-                    deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) => {
-                         try {
-                            // Need to handle tuples (arrays of JSONPODValues) vs single JSONPODValues
-                            if (Array.isArray(jsonItem)) {
-                                // It's a tuple
-                                return jsonItem.map((tupleItem, tupleIndex) =>
-                                    podValueFromJSON(tupleItem, `${listName}[${index}][${tupleIndex}]`)
-                                );
-                            } else {
-                                // It's a single value
-                                return podValueFromJSON(jsonItem, `${listName}[${index}]`);
-                            }
-                         } catch (parseError: any) {
-                             console.error(`Error parsing item ${index} in membership list '${listName}': ${parseError.message}`);
-                             throw parseError;
-                         }
-                    });
-                    */
                 }
             }
         }
@@ -508,7 +412,7 @@ async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs>
             owner: parsedInputs.owner, // Assume owner structure doesn't need deep PODValue parsing for now
             watermark: parsedInputs.watermark ? podValueFromJSON(parsedInputs.watermark, 'watermark') : undefined // Parse watermark if present
         };
-        // console.log("GPC Proof Inputs loaded and deserialized successfully.");
+
         return proofInputs;
 
     } catch (error: any) {

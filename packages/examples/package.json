@@ -5,12 +5,12 @@
   "private": true,
   "description": "Package for generating mock PODs, and a GPC proofs for various examples/use cases.",
   "scripts": {
-    "location:gen-pods": "ts-node location-bounding/scripts/generateMockLocationPods.ts",
-    "location:gen-distance-proof": "ts-node location-bounding/scripts/generateDistanceProof.ts",
-    "location:run-mock": "pnpm run location:gen-pods && pnpm run location:gen-distance-proof ./location-bounding/proof-configs/distanceProofConfig.ts ./location-bounding/pod-data/location_pods.json",
-    "item:gen-key-master-params": "ts-node item-types/scripts/generateKeyMasterParams.ts",
-    "item:gen-key-master-proof": "ts-node item-types/scripts/generateKeyMasterProof.ts ./item-types/proof-configs/keyMasterProofConfig.ts ./item-types/pod-data/key_master_params.json",
-    "item:run-mock": "pnpm run item:gen-key-master-params && ts-node item-types/scripts/generateKeyMasterParams.ts && pnpm run item:gen-key-master-proof"
+    "location:gen-params": "ts-node location-bounding/scripts/generateLocationParams.ts",
+    "location:gen-proof": "ts-node location-bounding/scripts/generateLocationProof.ts ./location-bounding/proof-configs/locationProofConfig.ts ./location-bounding/pod-data/location_proof_params.json",
+    "location:run-mock": "pnpm run location:gen-params && pnpm run location:gen-proof",
+    "inventory:gen-params": "ts-node inventory-verification/scripts/generateInventoryParams.ts",
+    "inventory:gen-proof": "ts-node inventory-verification/scripts/generateInventoryProof.ts ./inventory-verification/proof-configs/inventoryProofConfig.ts ./inventory-verification/pod-data/inventory_proof_params.json",
+    "inventory:run-mock": "pnpm run inventory:gen-params && pnpm run inventory:gen-proof"
   },
   "dependencies": {
     "@pcd/gpc": "^0.4.0",

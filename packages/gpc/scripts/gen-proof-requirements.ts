@@ -23,6 +23,7 @@ import {
   POD_NAME_REGEX,
   encodePublicKey,
   EDDSA_PUBKEY_TYPE_STRING,
+  podValueFromJSON,
 } from '@pcd/pod';
 import isEqual from 'lodash/isEqual';
 import uniq from 'lodash/uniq';
@@ -653,35 +654,6 @@ function toJson(data: any): string {
   );
 }
 
-// BigInt Reviver for parsing GPC inputs JSON file
-// Needed because GPCProofInputs object might contain BigInts (e.g., in membershipLists)
-// which are stringified by writeJsonFile.
-function jsonBigIntReviver(key: string, value: any): any {
-    // Handles simple stringified bigints ONLY for known non-POD fields or array elements (membership lists)
-    if (typeof value === 'string' && /^\d+$/.test(value)) {
-         try {
-             // Check specific known keys (e.g., Semaphore V3 commitment)
-             if (key === 'commitment') {
-                return BigInt(value);
-             }
-             // Check if it's an element within a membership list array (index key)
-             if (key.match(/^\d+$/)) { 
-                 return BigInt(value);
-             }
-         } catch { /* Ignore */ }
-    }
-    // Handles Semaphore V4 public key format
-    if (key === 'publicKey' && Array.isArray(value) && value.length === 2 && typeof value[0] === 'string' && typeof value[1] === 'string') {
-        try { return [BigInt(value[0]), BigInt(value[1])] as [bigint, bigint]; } catch { /* Ignore */ }
-    }
-    
-    // IMPORTANT: Do NOT interfere with PODValue structures here. 
-    // Let subsequent processing handle them based on their 'type' field.
-    // Specifically, do NOT revive `{ type: 'int', value: 'stringified_bigint' }` here.
-
-    return value;
-}
-
 // Main script logic
 // Restore arguments for config path and inputs path
 async function generateRequirementsData(configFilePath: string, gpcInputsFilePath: string) {
@@ -720,25 +692,63 @@ async function generateRequirementsData(configFilePath: string, gpcInputsFilePat
   console.log(`Attempting to load GPC inputs from: ${absoluteGpcInputsPath}`);
   try {
       const inputFileContent = await fs.readFile(absoluteGpcInputsPath, 'utf-8');
-      const parsedInputs = JSON.parse(inputFileContent, jsonBigIntReviver);
+      // <<< Parse without reviver >>>
+      const parsedInputs = JSON.parse(inputFileContent);
       if (typeof parsedInputs !== 'object' || parsedInputs === null || !parsedInputs.pods) {
           throw new Error("GPC inputs file content must be a JSON object with a 'pods' property.");
       }
+
+      // <<< Manually parse PODs >>>
       const mappedPods: Record<string, POD> = {};
       if (typeof parsedInputs.pods === 'object' && parsedInputs.pods !== null) {
           for (const podKey in parsedInputs.pods) {
               try {
+                  // Assume value is JSONPOD format
                   mappedPods[podKey] = POD.fromJSON(parsedInputs.pods[podKey] as JSONPOD);
               } catch (deserializeError: any) {
                   throw new Error(`Failed to deserialize POD for key '${podKey}': ${deserializeError.message}`);
               }
           }
       }
+
+      // <<< Manually parse membershipLists and watermark >>>
+      let deserializedMembershipLists: GPCProofInputs['membershipLists'] = undefined;
+      if (parsedInputs.membershipLists && typeof parsedInputs.membershipLists === 'object') {
+          deserializedMembershipLists = {};
+          for (const listName in parsedInputs.membershipLists) {
+              if (Object.prototype.hasOwnProperty.call(parsedInputs.membershipLists, listName)) {
+                  const jsonList = parsedInputs.membershipLists[listName];
+                  if (!Array.isArray(jsonList)) {
+                      throw new Error(`Inputs membership list '${listName}' is not an array.`);
+                  }
+                  // Correctly parse based on expected type (PODValue[] or PODValue[][])
+                  if (jsonList.length > 0 && Array.isArray(jsonList[0])) {
+                      // Assume it's a list of tuples (PODValue[][])
+                      deserializedMembershipLists[listName] = jsonList.map((jsonTuple: any[], tupleIndex: number) =>
+                          jsonTuple.map((jsonItem, itemIndex) =>
+                              podValueFromJSON(jsonItem, `${listName}[${tupleIndex}][${itemIndex}]`)
+                          )
+                      ) as PODValue[][];
+                  } else {
+                      // Assume it's a list of single values (PODValue[])
+                      deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) =>
+                          podValueFromJSON(jsonItem, `${listName}[${index}]`)
+                      ) as PODValue[];
+                  }
+              }
+          }
+      }
+
+      const deserializedWatermark = parsedInputs.watermark
+          ? podValueFromJSON(parsedInputs.watermark, 'watermark')
+          : undefined;
+
+      // <<< Reconstruct proofInputs with parsed parts >>>
       proofInputs = {
           pods: mappedPods,
-          membershipLists: parsedInputs.membershipLists as PODMembershipLists | undefined,
-          owner: parsedInputs.owner as any, // Use 'any' as before
-          watermark: parsedInputs.watermark as PODValue | undefined
+          membershipLists: deserializedMembershipLists,
+          owner: parsedInputs.owner as any, // Use 'any' as before, assume no deep PODValues needed
+          watermark: deserializedWatermark
       };
       console.log("Successfully loaded and parsed GPC inputs file.");
   } catch (error: any) {

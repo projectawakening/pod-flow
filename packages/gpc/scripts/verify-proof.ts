@@ -5,12 +5,9 @@ import {
     GPCBoundConfig,
     GPCRevealedClaims,
     ProtoPODGPCCircuitDesc,
-    GPCCircuitFamily,
     boundConfigFromJSON,
     revealedClaimsFromJSON,
-    gpcVerify,
     compileVerifyConfig,
-    gpcPreVerify
 } from '@pcd/gpc';
 import {
     PROTO_POD_GPC_FAMILY_NAME,
@@ -22,95 +19,11 @@ import { SupportedGPCCircuitParams, supportedParameterSets } from '../src/circui
 
 // --- Configuration ---
 const ARTIFACTS_BASE_DIR = path.resolve(__dirname, '..', 'artifacts');
-const PROOFS_BASE_DIR = path.resolve(__dirname, '..', 'proofs'); // Base dir for proof files
 
 // --- Helper Functions ---
 
 function logStep(message: string) {
     console.log(`\n=== ${message} ===`);
-}
-
-// <<< Add Recursive BigInt Parser >>>
-function parseBigIntsRecursive(obj: any): any {
-    // <<< RE-ADD handling for typeof obj === 'number' >>>
-    if (typeof obj === 'number') {
-        // Convert numbers to BigInt 
-        if (Number.isSafeInteger(obj)) { 
-            return BigInt(obj);
-        }
-        // Handle potential floating point or unsafe integers if necessary
-        console.warn(`Attempting to convert potentially unsafe integer or float to BigInt: ${obj}`);
-        try { return BigInt(Math.floor(obj)); } catch { return obj; } // Fallback
-    } else if (typeof obj === 'string' && /^\d+$/.test(obj)) { 
-        try {
-            // Try to parse strings that look like integers into BigInts
-            return BigInt(obj);
-        } catch (e) {
-            // Ignore errors (e.g., if string is too large for Number but not intended as BigInt)
-            // and return the original string
-            return obj;
-        }
-    } else if (Array.isArray(obj)) {
-        return obj.map(parseBigIntsRecursive);
-    } else if (typeof obj === 'object' && obj !== null) {
-        const newObj: { [key: string]: any } = {};
-        for (const key in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                newObj[key] = parseBigIntsRecursive(obj[key]);
-            }
-        }
-        return newObj;
-    } else {
-        return obj;
-    }
-}
-
-// <<< Add Recursive BigInt Stringifier (similar to generate-proof) >>>
-function stringifyBigIntsRecursive(obj: any): any {
-    if (typeof obj === 'bigint') {
-        return obj.toString();
-    } else if (Array.isArray(obj)) {
-        return obj.map(stringifyBigIntsRecursive);
-    } else if (typeof obj === 'object' && obj !== null) {
-        const newObj: { [key: string]: any } = {};
-        for (const key in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                newObj[key] = stringifyBigIntsRecursive(obj[key]);
-            }
-        }
-        return newObj;
-    } else {
-        return obj;
-    }
-}
-
-// <<< Add custom stringifier to show BigInt types >>>
-function stringifyWithTypes(obj: any): string {
-    // Limit depth to avoid excessive logging
-    let depth = 0;
-    const maxDepth = 5; 
-
-    return JSON.stringify(obj, (key, value) => {
-        if (typeof value === 'object' && value !== null) {
-            if (depth >= maxDepth) {
-                return '[Max Depth Reached]';
-            }
-            depth++;
-        } else {
-             // Reset depth when not traversing deeper
-             // This isn't perfect for complex structures but helps
-             depth = 0; 
-        }
-
-        if (typeof value === 'bigint') {
-            return `BigInt(${value.toString()})`;
-        }
-        // Truncate long strings/arrays if necessary (optional)
-        // if (typeof value === 'string' && value.length > 100) { return value.substring(0, 97) + '...'; }
-        // if (Array.isArray(value) && value.length > 20) { return `[Array(${value.length})]`; }
-
-        return value;
-    }, 2);
 }
 
 // Interface to represent the structure of the proof JSON file
@@ -254,5 +167,3 @@ verifyProof(proofPathArg).catch(error => {
     console.error("An unexpected error occurred during verification script execution:", error);
     process.exit(1);
 });
-
-// End of verify-proof script 

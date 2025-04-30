@@ -1,11 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { SupportedGPCCircuitParams, supportedParameterSets } from '../src/circuitParameterSets';
+import { PROTO_POD_GPC_FAMILY_NAME } from "@pcd/gpcircuits";
 
 // Base directory where compiled artifacts are stored
 const ARTIFACTS_BASE_DIR = path.join(__dirname, '..', 'artifacts');
-// Expected base name for compiled files within an artifact directory
-const ARTIFACT_BASENAME = 'circuit'; 
 
 // Type for the requirements file structure
 interface GPCRequirements {
@@ -45,12 +44,7 @@ function circuitParamsMeetRequirements(params: SupportedGPCCircuitParams, reqs: 
 async function checkArtifactsExist(circuitId: string): Promise<boolean> {
     if (!circuitId) return false;
 
-    // Corrected logic: Check for files directly in ARTIFACTS_BASE_DIR
-    // using the <familyName>_<circuitName> convention.
-    // We need the family name here.
-    // TODO: Pass family name in or determine it.
-    // For now, assuming PROTO_POD_GPC_FAMILY_NAME
-    const familyName = "proto-pod-gpc"; // Hardcoding for now, needs proper fix
+    const familyName = PROTO_POD_GPC_FAMILY_NAME;
 
     const wasmPath = path.join(ARTIFACTS_BASE_DIR, `${familyName}_${circuitId}.wasm`);
     const pkeyPath = path.join(ARTIFACTS_BASE_DIR, `${familyName}_${circuitId}-pkey.zkey`); // Note: -pkey.zkey
@@ -58,8 +52,8 @@ async function checkArtifactsExist(circuitId: string): Promise<boolean> {
 
     try {
         await fs.access(wasmPath);
-        await fs.access(pkeyPath); // Check for pkey
-        await fs.access(vkeyPath); // Check for vkey
+        await fs.access(pkeyPath);
+        await fs.access(vkeyPath);
         return true; // All found
     } catch (error: any) {
         // Optional: Log which file was missing for debugging

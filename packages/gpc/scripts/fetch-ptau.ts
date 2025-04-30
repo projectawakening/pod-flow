@@ -2,7 +2,6 @@ import fs from 'fs'; // Use promises API where possible, but need streams
 import fsPromises from 'fs/promises';
 import path from 'path';
 import https from 'https';
-import url from 'url';
 
 // --- Configuration Reading ---
 function getPtauConfig(): { size: number; dir: string } {

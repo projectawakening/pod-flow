@@ -25,20 +25,6 @@ export interface SupportedGPCCircuitParams {
 // Array of supported parameter sets
 export const supportedParameterSets: SupportedGPCCircuitParams[] = [
     {
-        "maxObjects": 3,
-        "maxEntries": 26,
-        "merkleMaxDepth": 6,
-        "maxNumericValues": 2,
-        "maxEntryInequalities": 1,
-        "maxLists": 0,
-        "maxListElements": 0,
-        "maxTuples": 0,
-        "tupleArity": 0,
-        "includeOwnerV3": false,
-        "includeOwnerV4": false,
-        "circuitId": "3o-26e-6md-2nv-1ei-0x0l-0x0t-0ov3-0ov4"
-    },
-    {
         "maxObjects": 4,
         "maxEntries": 51,
         "merkleMaxDepth": 5,
@@ -51,5 +37,19 @@ export const supportedParameterSets: SupportedGPCCircuitParams[] = [
         "includeOwnerV3": false,
         "includeOwnerV4": false,
         "circuitId": "4o-51e-5md-1nv-0ei-1x3l-0x0t-0ov3-0ov4"
+    },
+    {
+        "maxObjects": 3,
+        "maxEntries": 26,
+        "merkleMaxDepth": 6,
+        "maxNumericValues": 2,
+        "maxEntryInequalities": 1,
+        "maxLists": 0,
+        "maxListElements": 0,
+        "maxTuples": 0,
+        "tupleArity": 0,
+        "includeOwnerV3": false,
+        "includeOwnerV4": false,
+        "circuitId": "3o-26e-6md-2nv-1ei-0x0l-0x0t-0ov3-0ov4"
     }
 ]; 

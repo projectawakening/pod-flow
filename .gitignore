@@ -6,10 +6,6 @@
 *.db
 *.db-journal
 
-# Environment variables
-.env
-packages/contracts/.env
-
 # Powers of Tau file (fetched, not committed)
 /packages/gpc/ptau/*
 

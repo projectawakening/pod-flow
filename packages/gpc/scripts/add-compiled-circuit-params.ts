@@ -1,10 +1,9 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { 
-    ProtoPODGPCCircuitParams, 
-    PROTO_POD_GPC_FAMILY_NAME 
+  ProtoPODGPCCircuitParams, 
+  PROTO_POD_GPC_FAMILY_NAME 
 } from "@pcd/gpcircuits";
-// Import the type directly, assuming the file exists and exports it
 import { SupportedGPCCircuitParams } from '../src/circuitParameterSets'; // Updated path 
 import { readJsonFile } from '../../../packages/pods/utils/fsUtils'; // For loading requirements
 
@@ -146,7 +145,6 @@ async function addCircuitParams(requirementsFilePath: string) {
         if (existingIndex !== -1) {
             // console.log(`Circuit ID ${circuitId} already exists in the parameter sets. No update needed.`);
         } else {
-            // console.log(`Circuit ID ${circuitId} not found. Adding new entry.`);
             // Create the new entry for the TS file
             const newParamSetEntry: SupportedGPCCircuitParams = {
                 ...targetParams, // Spread the mapped parameters

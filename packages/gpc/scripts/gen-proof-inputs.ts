@@ -2,39 +2,26 @@ import path from 'path';
 import fs from 'fs/promises'; // Use promises API for mkdir
 import {
   POD,
-  PODEntries, // Keep for type safety if needed, but maybe not
   JSONPOD,
   PODValue, // Keep for toJson
   podValueFromJSON, // Import for BigInt reviver in params loading
   podValueToJSON // Import for podValueToJSON
 } from '@pcd/pod';
 import {
-    GPCProofInputs,  // Type for the inputs object we are creating
-    GPCProofConfig,  // Need to load the config to determine structure
-    PODMembershipLists // Import for type safety
+  GPCProofInputs,  // Type for the inputs object we are creating
+  GPCProofConfig,  // Need to load the config to determine structure
+  PODMembershipLists // Import for type safety
 } from '@pcd/gpc';
-// Remove invalid import
-// import {
-//     proofInputsToJSON 
-// } from "@pcd/gpc/dist/src/gpcJSON"; 
 
-// Re-use utils from distanceProof script
 import { loadPrivateKey, loadPublicKey, readJsonFile, writeJsonFile } from '../../../packages/pods/utils/fsUtils';
 import { limbsToBigInt } from '../../../packages/pods/utils/podBigInt';
 
 // --- Configuration ---
-// Base directory for config files (REMOVED as config path is resolved from CWD)
-// const CONFIGS_BASE_DIR = path.resolve(__dirname, '..', 'proof-configs');
 const OUTPUT_BASE_DIR = path.resolve(__dirname, '..', 'proof-inputs'); // Base dir for output
 
 // Load authority keys once (assuming PODs in input file were signed with this)
 // This is still needed for signature verification
 const AUTHORITY_PUBLIC_KEY_STR = loadPublicKey();
-const AUTHORITY_PRIVATE_KEY = loadPrivateKey(); // Load private key for signing generated PODs
-// Removed constants related to distance calculation
-// const ALLOWED_POD_TYPES = new Set([...]);
-// const MAX_DISTANCE_SQUARED_ALLOWED = ...;
-// const POD_DATA_TYPE_DISTANCE = ...;
 
 // Define local interface for Owner type from params file
 interface ParamsOwnerInput {
@@ -42,6 +29,7 @@ interface ParamsOwnerInput {
   semaphoreV4?: { publicKey: [string, string] }; // Expect strings from JSON
   externalNullifier?: PODValue;
 }
+
 // Define local interface for the params file structure
 interface ExampleParams {
     pods: { [contentId: string]: JSONPOD }; 
@@ -51,19 +39,6 @@ interface ExampleParams {
     watermark?: PODValue;
     // Add other potential parameters here
 }
-
-// --- Helper Functions ---
-
-// Keep only the toJson helper
-function toJson(data: any): string {
-  return JSON.stringify(
-    data,
-    (key, value) => (typeof value === 'bigint' ? value.toString() : value),
-    2
-  );
-}
-
-// Removed: getEntryValue, getIntValue, getStringValue, reconstructLocation, absDiff
 
 // --- Main Generation Logic ---
 
@@ -76,6 +51,7 @@ async function generateGPCInputs(configFilePath: string, paramsFilePath: string)
       process.exit(1);
   }
 
+  // Resolve paths relative to the current working directory
   const absoluteConfigPath = path.resolve(process.cwd(), configFilePath);
   const absoluteParamsPath = path.resolve(process.cwd(), paramsFilePath);
 
