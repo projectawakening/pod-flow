@@ -1,0 +1,31 @@
+pragma solidity >=0.7.0 <0.9.0;
+
+library ICLib_<%= chunkIndex %>_<%= canonicalCircuitNameUnderscores %> {
+    bytes4 constant SELECTOR_DELEGATECALL_G1_MUL_ACC_C = 0x4a859e67;
+
+<%- icConstantsChunk %>
+
+    function accumulateVkXChunk(
+        address g1UtilsLibAddress,
+        uint256[2] memory vkXAccumulator,
+        uint256[] memory pubSignals
+    ) external {
+        require(pubSignals.length >= <%= requireSignalCountCheck %>, "ICLib<%= chunkIndex %>: Not enough public signals provided.");
+
+        uint256 freeMemPtr;
+        uint256 calldataPtr;
+        uint256 returnDataPtr;
+
+        assembly {
+            freeMemPtr := mload(0x40)
+            calldataPtr := freeMemPtr
+
+            returnDataPtr := add(freeMemPtr, 164)
+            mstore(0x40, add(returnDataPtr, 64))
+
+            mstore(calldataPtr, shl(224, SELECTOR_DELEGATECALL_G1_MUL_ACC_C))
+        }
+
+        <%- unrolledLoopCode %>
+    }
+}

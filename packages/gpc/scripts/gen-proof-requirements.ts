@@ -4,11 +4,14 @@ import {
   GPCProofConfig,
   GPCProofInputs,
   PODMembershipLists,
+  IdentityProtocol,
+  GPCProofEntryConfig
 } from '@pcd/gpc';
 import {
   POD, 
   JSONPOD, 
   PODValue, 
+  JSONPODValue,
   requireType, 
   checkPODName,
   calcMinMerkleDepthForEntries,
@@ -24,6 +27,7 @@ import {
   encodePublicKey,
   EDDSA_PUBKEY_TYPE_STRING,
   podValueFromJSON,
+  podEntriesFromJSON
 } from '@pcd/pod';
 import isEqual from 'lodash/isEqual';
 import uniq from 'lodash/uniq';
@@ -55,6 +59,25 @@ interface GPCOwnerInput {
   semaphoreV3?: { commitment: bigint };
   semaphoreV4?: { publicKey: [bigint, bigint] }; // Based on checkProofInputsLocal
   externalNullifier?: PODValue;
+}
+
+// --- Type Definitions for _gpc_inputs.json structure ---
+interface GPCInputsFileOwnerV4 { 
+    publicKey: [string, string]; // Stringified BigInts
+    secretScalar?: string;       // Stringified BigInt (private key scalar)
+    identityCommitment?: string; // Added: Stringified BigInt (identity commitment)
+}
+interface GPCInputsFileOwner {
+    semaphoreV3?: { commitment: string }; // Stringified BigInt
+    semaphoreV4?: GPCInputsFileOwnerV4;
+    externalNullifier?: JSONPODValue;
+}
+interface GPCInputsFileStructure { // Type for the content of _gpc_inputs.json
+    pods: Record<string, JSONPOD>; 
+    podConfigMapping: Record<string, string>; 
+    membershipLists?: PODMembershipLists; // Assumed JSON-compatible from its generation
+    owner?: GPCInputsFileOwner;
+    watermark?: JSONPODValue;
 }
 
 // +++ START COPIED LOGIC from @pcd/gpc +++
@@ -474,26 +497,41 @@ function checkProofInputsLocal(proofInputs: GPCProofInputs): GPCRequirements {
         requiredMerkleDepth = max([requiredMerkleDepth, pod.content.merkleTreeDepth]) ?? 0;
     }
     if (proofInputs.owner !== undefined) {
+        let ownerV3Present = false;
+        let ownerV4Present = false;
         if (proofInputs.owner.semaphoreV3 !== undefined) {
             requireType(`owner.SemaphoreV3`, proofInputs.owner.semaphoreV3, "object");
-            requireType(`owner.SemaphoreV3.commitment`, proofInputs.owner.semaphoreV3.commitment, "bigint");
+            // The object from GPCProofInputs will be { commitment: bigint } due to the cast in gen-proof-inputs
+            // but a full IdentityV3 object has more fields. The check here should align with what's available.
+            if (typeof (proofInputs.owner.semaphoreV3 as any).commitment !== 'bigint') {
+                throw new TypeError(`owner.SemaphoreV3.commitment must be a bigint.`);
+            }
+            ownerV3Present = true;
         }
         if (proofInputs.owner.semaphoreV4 !== undefined) {
              requireType(`owner.SemaphoreV4`, proofInputs.owner.semaphoreV4, "object");
-             requireType(`owner.SemaphoreV4.publicKey`, proofInputs.owner.semaphoreV4.publicKey, "array");
-             if (proofInputs.owner.semaphoreV4.publicKey.length !== 2) throw new TypeError(`owner.semaphoreV4.publicKey must be Point`);
-             requireType("publicKey[0]", proofInputs.owner.semaphoreV4.publicKey[0], "bigint");
-             requireType("publicKey[1]", proofInputs.owner.semaphoreV4.publicKey[1], "bigint");
+             // The object from GPCProofInputs will be { publicKey: [bigint, bigint] } due to cast
+             const pk = (proofInputs.owner.semaphoreV4 as any).publicKey;
+             requireType(`owner.SemaphoreV4.publicKey`, pk, "array");
+             if (pk.length !== 2) throw new TypeError(`owner.semaphoreV4.publicKey must be a Point (array of 2 bigints)`);
+             requireType("publicKey[0]", pk[0], "bigint");
+             requireType("publicKey[1]", pk[1], "bigint");
+             ownerV4Present = true;
         }
         if (proofInputs.owner.externalNullifier !== undefined) {
-            if (proofInputs.owner.semaphoreV3 === undefined && proofInputs.owner.semaphoreV4 === undefined) throw new Error(`External nullifier requires identity object.`);
+            if (!ownerV3Present && !ownerV4Present) throw new Error(`External nullifier requires an identity object.`);
             else checkPODValue("owner.externalNullifier", proofInputs.owner.externalNullifier);
         }
     }
     const numListElements = proofInputs.membershipLists === undefined ? {} : checkListMembershipInputLocal(proofInputs.membershipLists);
     const maxListSize = numListElements && Object.keys(numListElements).length > 0 ? max(Object.values(numListElements)) ?? 0 : 0;
     if (proofInputs.watermark !== undefined) checkPODValue("watermark", proofInputs.watermark);
-    return GPCRequirements(totalObjects, totalObjects, requiredMerkleDepth, 0, 0, 0, maxListSize, {});
+    // The GPCRequirements returned by checkProofInputsLocal should also reflect if owner types are present in inputs.
+    // This will be merged with requirements from checkProofConfigLocal.
+    return GPCRequirements(totalObjects, totalObjects, requiredMerkleDepth, 0, 0, 0, maxListSize, {}, 
+        !!proofInputs.owner?.semaphoreV3, // includeOwnerV3 based on presence in inputs
+        !!proofInputs.owner?.semaphoreV4  // includeOwnerV4 based on presence in inputs
+    );
 }
 
 /** Checks correspondence between proof config and inputs. */
@@ -510,14 +548,36 @@ function checkProofInputsForConfigLocal(proofConfig: GPCProofConfig, proofInputs
             if (podValue === undefined) throw new ReferenceError(`Configured entry ${objName}.${entryName} not in input.`);
             if (entryConfig.isOwnerID !== undefined) {
                 hasOwnerEntry = true;
-                if (!proofInputs.owner?.semaphoreV3 && !proofInputs.owner?.semaphoreV4) throw new Error("Config expects owner, but none provided.");
-                for (const [ownerIDType, ownerID] of [[SEMAPHORE_V3, proofInputs.owner.semaphoreV3?.commitment], [SEMAPHORE_V4, proofInputs.owner.semaphoreV4?.publicKey ? encodePublicKey(proofInputs.owner.semaphoreV4.publicKey) : undefined]]) {
-                    if (entryConfig.isOwnerID === ownerIDType) {
-                        if (ownerID === undefined) throw new ReferenceError(`Config owner commitment references missing identity.`);
-                        if ((ownerIDType === SEMAPHORE_V3 && podValue.type !== "cryptographic") || (ownerIDType === SEMAPHORE_V4 && podValue.type !== EDDSA_PUBKEY_TYPE_STRING)) throw new Error("Owner ID type mismatch (V3 crypto, V4 EdDSA pubkey).");
-                        if (podValue.value !== ownerID) throw new Error(`Config owner commitment doesn't match identity.`);
-                        break;
+                if (!proofInputs.owner?.semaphoreV3 && !proofInputs.owner?.semaphoreV4) throw new Error("Config expects owner, but none provided in inputs.");
+                
+                let ownerIDMatches = false;
+                if (entryConfig.isOwnerID === SEMAPHORE_V3 && proofInputs.owner?.semaphoreV3) {
+                    // Assuming proofInputs.owner.semaphoreV3 is { commitment: bigint } from gen-proof-inputs
+                    const ownerID = (proofInputs.owner.semaphoreV3 as any).commitment;
+                    if (ownerID === undefined) throw new ReferenceError(`Config owner commitment references missing V3 identity in inputs.`);
+                    if (podValue.type !== "cryptographic") throw new Error("Owner ID type mismatch (V3 crypto).");
+                    if (podValue.value !== ownerID) throw new Error(`Config owner V3 commitment doesn't match identity in inputs.`);
+                    ownerIDMatches = true;
+                }
+                
+                if (entryConfig.isOwnerID === SEMAPHORE_V4 && proofInputs.owner?.semaphoreV4) {
+                    const ownerPublicKeyComponents = (proofInputs.owner.semaphoreV4 as any).publicKey;
+                    if (ownerPublicKeyComponents === undefined || !Array.isArray(ownerPublicKeyComponents) || ownerPublicKeyComponents.length !== 2) {
+                        throw new ReferenceError(`Config owner V4 public key references missing or malformed V4 identity in inputs.`);
                     }
+                    // Revert to comparing the EdDSA public key string from the POD entry
+                    // with the encoded public key from the owner inputs.
+                    const ownerIDString = encodePublicKey(ownerPublicKeyComponents as [bigint, bigint]); 
+
+                    if (podValue.type !== EDDSA_PUBKEY_TYPE_STRING) throw new Error("Owner ID type mismatch (V4 EdDSA pubkey string expected in POD for issuer).");
+                    if (podValue.value !== ownerIDString) {
+                        throw new Error(`Config owner V4 public key (issuer field) value '${podValue.value}' doesn\'t match encoded V4 identity '${ownerIDString}' from inputs.owner.semaphoreV4.publicKey.`);
+                    }
+                    ownerIDMatches = true;
+                }
+
+                if (!ownerIDMatches) {
+                    throw new Error(`Configured ownerID type (${entryConfig.isOwnerID}) not found or does not match in proof inputs owner object.`);
                 }
             }
             const entryEqConfig = entryConfig.equalsEntry || entryConfig.notEqualsEntry;
@@ -628,8 +688,8 @@ function mergeRequirementsLocal(rs1: GPCRequirements, rs2: GPCRequirements): GPC
         max([rs1.nLists, rs2.nLists]) ?? 0,
         max([rs1.maxListSize, rs2.maxListSize]) ?? 0,
         tupleArities,
-        rs1.includeOwnerV3 || rs2.includeOwnerV3,
-        rs1.includeOwnerV4 || rs2.includeOwnerV4
+        rs1.includeOwnerV3 || rs2.includeOwnerV3, // Correctly merge includeOwnerV3
+        rs1.includeOwnerV4 || rs2.includeOwnerV4  // Correctly merge includeOwnerV4
     );
 }
 
@@ -656,7 +716,7 @@ function toJson(data: any): string {
 
 // Main script logic
 // Restore arguments for config path and inputs path
-async function generateRequirementsData(configFilePath: string, gpcInputsFilePath: string) {
+async function generateRequirementsData(configFilePath: string, gpcInputsFilePath: string): Promise<void> {
   console.log(`Generating requirements data using config: ${configFilePath}`);
   console.log(`Using GPC inputs file: ${gpcInputsFilePath}`);
 
@@ -675,12 +735,28 @@ async function generateRequirementsData(configFilePath: string, gpcInputsFilePat
   console.log(`Attempting to load config from: ${absoluteConfigPath}`);
   try {
     const configModule = require(absoluteConfigPath);
-    const exportKey = Object.keys(configModule)[0];
-    proofConfig = configModule[exportKey];
-    if (!proofConfig || !proofConfig.pods) {
-        throw new Error(`Could not find exported config with a 'pods' property.`);
+    let foundConfig: GPCProofConfig | undefined = undefined;
+    let foundKey: string | undefined = undefined;
+
+    // Iterate through exports to find the config object
+    for (const key in configModule) {
+        if (Object.prototype.hasOwnProperty.call(configModule, key)) {
+            const potentialConfig = configModule[key];
+            // Structural check: does it have a 'pods' object?
+            if (potentialConfig && typeof potentialConfig === 'object' && potentialConfig.pods && typeof potentialConfig.pods === 'object') {
+                foundConfig = potentialConfig as GPCProofConfig; // Cast after check
+                foundKey = key;
+                break; // Found the first one, stop looking
+            }
+        }
     }
-    console.log(`Successfully loaded config: ${exportKey}`);
+
+    if (!foundConfig) {
+        throw new Error('Could not find a valid GPCProofConfig export in the config file.');
+    }
+    proofConfig = foundConfig; // Assign the found config
+    console.log(`Successfully loaded config exported as: ${foundKey || 'unknown'}`); // Log the key name
+
   } catch (error: any) {
     console.error(`Error loading proof config from ${absoluteConfigPath}: ${error.message}`);
     process.exit(1);
@@ -743,11 +819,50 @@ async function generateRequirementsData(configFilePath: string, gpcInputsFilePat
           ? podValueFromJSON(parsedInputs.watermark, 'watermark')
           : undefined;
 
+      // <<< Manually parse owner data from parsedInputs, ensuring correct types for GPCProofInputs >>>
+      let finalOwnerForProofInputs: GPCProofInputs['owner'] = undefined;
+      if (parsedInputs.owner && typeof parsedInputs.owner === 'object') {
+          const jsonOwner = parsedInputs.owner;
+          finalOwnerForProofInputs = {};
+          if (jsonOwner.semaphoreV3?.commitment) {
+              finalOwnerForProofInputs.semaphoreV3 = { commitment: BigInt(jsonOwner.semaphoreV3.commitment) } as any; 
+          }
+          if (jsonOwner.semaphoreV4?.publicKey) {
+              const pk = jsonOwner.semaphoreV4.publicKey;
+              const ss = jsonOwner.semaphoreV4.secretScalar; 
+              const ic = jsonOwner.semaphoreV4.identityCommitment; // Parse identityCommitment
+              const semV4Data: { publicKey: [bigint, bigint], secretScalar?: bigint, identityCommitment?: bigint } = {
+                  publicKey: [BigInt(pk[0]), BigInt(pk[1])]
+              };
+              if (ss !== undefined && typeof ss === 'string') {
+                  semV4Data.secretScalar = BigInt("0x" + ss); 
+              }
+              if (ic !== undefined && typeof ic === 'string') { // Store identityCommitment if present
+                  // Assuming identityCommitment is a hex string if it needs "0x", or decimal otherwise.
+                  // For consistency with secretScalar, let's assume it might also be hex.
+                  // However, if it was produced by `bigint.toString()`, it would be decimal.
+                  // Let's assume decimal for now, as created in generateFullLocationParams.ts. If it were hex, it would need "0x".
+                  semV4Data.identityCommitment = BigInt(ic); 
+              }
+              // Note: The GPCProofInputs type for semaphoreV4 might only accept publicKey and secretScalar.
+              // The full Identity object is constructed in gen-proof.ts. For now, we parse all available fields.
+              finalOwnerForProofInputs.semaphoreV4 = semV4Data as any; 
+          }
+          if (jsonOwner.externalNullifier) {
+              // externalNullifier in JSON would be JSONPODValue, convert to PODValue
+              finalOwnerForProofInputs.externalNullifier = podValueFromJSON(jsonOwner.externalNullifier, 'owner.externalNullifier');
+          }
+
+          if (Object.keys(finalOwnerForProofInputs).length === 0) {
+              finalOwnerForProofInputs = undefined;
+          }
+      }
+
       // <<< Reconstruct proofInputs with parsed parts >>>
       proofInputs = {
           pods: mappedPods,
           membershipLists: deserializedMembershipLists,
-          owner: parsedInputs.owner as any, // Use 'any' as before, assume no deep PODValues needed
+          owner: finalOwnerForProofInputs, // Use the properly parsed owner
           watermark: deserializedWatermark
       };
       console.log("Successfully loaded and parsed GPC inputs file.");
@@ -797,14 +912,35 @@ async function generateRequirementsData(configFilePath: string, gpcInputsFilePat
   }
 }
 
-// --- Script Execution ---
-const args = process.argv.slice(2);
-// Restore arguments
-const configArg = args[0]; // Expects path to config file
-const gpcInputsFileArg = args[1]; // Expects path to the _gpc_inputs.json file
+// NEW main_cli function for manual argument parsing
+async function main_cli() {
+  console.log("--- Generating GPC Proof Requirements (Manual Arg Parse) ---");
+  const args = process.argv.slice(2); // Skip node and script path
 
-// Pass both arguments
-generateRequirementsData(configArg, gpcInputsFileArg).catch(error => {
-  console.error("Unhandled error during script execution:", error);
-  process.exit(1);
-}); 
+  let configPathArg: string | undefined;
+  let gpcInputsPathArg: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--config' && i + 1 < args.length) {
+      configPathArg = args[++i];
+    } else if (args[i] === '--gpc-inputs' && i + 1 < args.length) {
+      gpcInputsPathArg = args[++i];
+    }
+  }
+
+  if (!configPathArg || !gpcInputsPathArg) {
+    console.error("Error: Missing required arguments.");
+    console.error("Usage: ts-node <script_name> --config <configFile> --gpc-inputs <gpcInputsFile>");
+    process.exit(1);
+  }
+
+  // The generateRequirementsData function will use these paths
+  await generateRequirementsData(configPathArg, gpcInputsPathArg);
+}
+
+if (require.main === module) {
+    main_cli().catch(error => {
+        console.error("Unhandled error in main_cli execution (gen-proof-requirements.ts):", error);
+        process.exit(1);
+    });
+} 

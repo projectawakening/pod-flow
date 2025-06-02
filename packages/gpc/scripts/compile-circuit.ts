@@ -23,23 +23,6 @@ const TMP_COMPILE_BASE_DIR = path.resolve(__dirname, '..', 'build', 'tmp_compile
 // Path to the file containing the supported parameter sets
 const CIRCUIT_PARAMS_FILE_PATH = path.resolve(__dirname, '../src/circuitParameterSets.ts');
 
-// Function to convert params object to ordered array for circuits.json
-function paramsToArray(params: ProtoPODGPCCircuitParams): number[] {
-    return [
-        params.maxObjects,
-        params.maxEntries,
-        params.merkleMaxDepth,
-        params.maxNumericValues,
-        params.maxEntryInequalities,
-        params.maxLists,
-        params.maxListElements,
-        params.maxTuples,
-        params.tupleArity,
-        params.includeOwnerV3 ? 1 : 0,
-        params.includeOwnerV4 ? 1 : 0
-    ];
-}
-
 // --- Helper Functions ---
 
 function logStep(message: string) {
@@ -240,7 +223,8 @@ async function compileCircuit(requirementsFilePath: string): Promise<string> {
                     const exists = currentSets.some(p => p.circuitId === circuitName);
                     if (exists) {
                         logStep(`Circuit ${circuitName} already exists in supportedParameterSets. Skipping compilation.`);
-                        return ""; // Return empty string to signal skip
+                        console.log(`CIRCUIT_NAME: ${circuitName}`);
+                        return circuitName; // Return the name even if skipped
                     } else {
                         logStep(`  Circuit ${circuitName} not found in supportedParameterSets. Proceeding with compilation.`);
                     }
@@ -532,7 +516,10 @@ async function compileCircuit(requirementsFilePath: string): Promise<string> {
          logStep("Build directory path invalid or missing, skipping cleanup.");
     }
 
-    return buildDir;
+    // <<< Log and return circuitName on success >>>
+    logStep(`Compilation successful for circuit: ${circuitName}`);
+    console.log(`CIRCUIT_NAME: ${circuitName}`); // Standardized output
+    return circuitName; // Return the canonical name
 }
 
 // Export the function for use in other modules
@@ -548,15 +535,18 @@ if (!requirementsPathArg) {
 
 // Use a .then/.catch structure for top-level async call
 compileCircuit(requirementsPathArg)
-    .then(async (resolvedBuildDir) => {
+    .then(async (compiledCircuitName) => { // Capture the returned name
         // Terminate snarkjs workers if possible
         if (typeof (snarkjs as any)?.thread?.terminateAll === 'function') {
             await (snarkjs as any).thread.terminateAll();
         }
 
+        // Determine the build directory path based on the returned name
+        const resolvedBuildDir = compiledCircuitName ? path.join(CIRCOMKIT_BUILD_DIR_BASE, compiledCircuitName) : "";
+
         // Cleanup build directory and tmp_compile base
-        // Only attempt cleanup if compilation wasn't skipped (resolvedBuildDir is not empty)
-        if (resolvedBuildDir && resolvedBuildDir !== "") {
+        // Only attempt cleanup if compilation wasn't skipped (compiledCircuitName is not empty)
+        if (resolvedBuildDir && compiledCircuitName !== "") {
             // Cleanup build directory for the specific circuit
             if (fsSync.existsSync(resolvedBuildDir)) {
                 logStep(`Cleaning up final build directory: ${resolvedBuildDir}...`);
@@ -578,10 +568,10 @@ compileCircuit(requirementsPathArg)
                      }
                  }
             }
-        } else if (resolvedBuildDir === "") {
+        } else if (compiledCircuitName !== "") { // Check if skipped
              logStep("Compilation skipped, no build directory cleanup needed.");
         } else {
-            // This case shouldn't ideally be reached
+            // This case shouldn't ideally be reached if skip logic returns name
              logStep("Build directory path invalid or missing, skipping cleanup.");
         }
 

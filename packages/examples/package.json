@@ -3,17 +3,18 @@
   "version": "0.0.1",
   "license": "MIT",
   "private": true,
-  "description": "Package for generating mock PODs, and a GPC proofs for various examples/use cases.",
+  "description": "Package for generating example PODs and GPC proofs for various use cases in on-chain and off-chain data flows.",
   "scripts": {
-    "location:gen-params": "ts-node location-bounding/scripts/generateLocationParams.ts",
-    "location:gen-proof": "ts-node location-bounding/scripts/generateLocationProof.ts ./location-bounding/proof-configs/locationProofConfig.ts ./location-bounding/pod-data/location_proof_params.json",
-    "location:run-mock": "pnpm run location:gen-params && pnpm run location:gen-proof",
-    "inventory:gen-params": "ts-node inventory-verification/scripts/generateInventoryParams.ts",
-    "inventory:gen-proof": "ts-node inventory-verification/scripts/generateInventoryProof.ts ./inventory-verification/proof-configs/inventoryProofConfig.ts ./inventory-verification/pod-data/inventory_proof_params.json",
-    "inventory:run-mock": "pnpm run inventory:gen-params && pnpm run inventory:gen-proof"
+    "location:gen-core-proof": "ts-node ./location-bounding/location-attestation/scripts/runLocationAttestationCoreProof.ts",
+    "distance:gen-core-proof": "ts-node ./location-bounding/distance-attestation/scripts/runDistanceAttestationCoreProof.ts",
+    "distance:gen-full-proof": "ts-node ./location-bounding/distance-attestation/scripts/runDistanceAttestationFullProof.ts"
   },
   "dependencies": {
-    "@pcd/gpc": "^0.4.0",
-    "@pcd/pod": "^0.5.0"
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "@pcd/gpc": "^0.4.1",
+    "@pcd/pod": "^0.5.1",
+    "@semaphore-protocol/identity": "^4.10.0",
+    "commander": "^13.1.0",
+    "viem": "2.21.19"
   }
 }

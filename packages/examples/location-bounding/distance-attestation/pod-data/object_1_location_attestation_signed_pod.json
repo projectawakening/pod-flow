@@ -1,0 +1,19 @@
+{
+  "entries": {
+    "keccak256_merkle_root": "0x5d247cd92a35b66e67db4122d06660e91f600abaea0b77084d4fa6022f57e0fb",
+    "location_x_high": 0,
+    "location_x_low": 10,
+    "location_y_high": 0,
+    "location_y_low": 20,
+    "location_z_high": 0,
+    "location_z_low": 30,
+    "objectId": {
+      "cryptographic": "0x546f601774410ed85e99e739fb228cbe"
+    },
+    "pod_data_type": "evefrontier.location_attestation",
+    "solarSystemId": 30010690,
+    "timestamp": 1748594226958
+  },
+  "signature": "KiXvl+pnR4FUuK1zmUn1ObL4UIni6ZfCq5P4Q7Q0OxgR/oPB7mmtQlYVPoGJH8RGKsbaZLknF+gAXqYiDsbiAw",
+  "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+}

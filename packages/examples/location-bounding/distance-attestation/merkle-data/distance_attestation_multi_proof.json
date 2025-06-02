@@ -1,0 +1,23 @@
+{
+  "leaves": [
+    "0x0659b6ad42c9c0a18950da98a2cdc010b540dd4b1e8d337db8b6154bfbd44152",
+    "0x144beecbf503c6f2207161c13abc11c462b39aae68cd342793df8fd5d26c345f",
+    "0x3127964f7efed1d01608b4b70102d3ed10ee7efccba12b524eba559c7ba87af5",
+    "0x768cc9699289db86e768e025187f1934baf6e7b26b0fa22ee9917fda02c58d78",
+    "0xe5ba43f6a5a0f3319480203d6fbbeea4959c63ada5e19ef3185ebcc8a084fcb9"
+  ],
+  "proof": [
+    "0x4c5f7cc86b0cc4794b1cedf5d27df0e3beff49a1dd4380ad8a469883c2f2dae6",
+    "0xb86237a88270ca7cefc339ffe8ee10b30e1fcc4cccc27e51352501c987e58c04",
+    "0xcffbd76fa23041cc54a5eda79e656581872b7832678bdeda972c4aea80689d06"
+  ],
+  "proofFlags": [
+    true,
+    false,
+    false,
+    false,
+    true,
+    true,
+    true
+  ]
+}

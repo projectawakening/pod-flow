@@ -11,6 +11,8 @@ out = "out"
 allow_paths = [
   # pnpm symlinks to the project root's node_modules
   "../../node_modules",
+  # allow contracts to import from our local node_modules (@openzeppelin/contracts)
+  "./node_modules",
   # template uses linked mud packages from within the mud monorepo
   "../../../../packages",
   # projects created from this template and using linked mud packages
@@ -21,6 +23,7 @@ extra_output_files = [
   "evm.bytecode"
 ]
 fs_permissions = [{ access = "read", path = "./"}]
+gas_reports = ["*"]
 
 [profile.garnet]
 eth_rpc_url = "https://rpc.garnetchain.com"

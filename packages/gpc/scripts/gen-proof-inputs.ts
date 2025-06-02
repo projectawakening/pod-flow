@@ -3,249 +3,273 @@ import fs from 'fs/promises'; // Use promises API for mkdir
 import {
   POD,
   JSONPOD,
-  PODValue, // Keep for toJson
-  podValueFromJSON, // Import for BigInt reviver in params loading
-  podValueToJSON // Import for podValueToJSON
+  // PODValue, // Not directly used for GPCInputsJSON construction from ExampleParams
+  JSONPODValue,
+  podValueFromJSON, 
+  // podValueToJSON, // Not directly used here for GPCInputsJSON construction
+  podEntriesFromJSON,
+  JSONPODEntries
+  // checkPOD // Removed, not exported or used
 } from '@pcd/pod';
 import {
-  GPCProofInputs,  // Type for the inputs object we are creating
-  GPCProofConfig,  // Need to load the config to determine structure
-  PODMembershipLists // Import for type safety
+  GPCProofConfig,
+  // GPCProofInputs, // We are creating a JSON structure, not full GPCProofInputs with objects
+  PODMembershipLists, // This type might need to be Record<PODName, JSONPODValue[]> for GPCInputsJSON
 } from '@pcd/gpc';
+// Removed: import { Command } from 'commander';
 
-import { loadPrivateKey, loadPublicKey, readJsonFile, writeJsonFile } from '../../../packages/pods/utils/fsUtils';
-import { limbsToBigInt } from '../../../packages/pods/utils/podBigInt';
-
-// --- Configuration ---
-const OUTPUT_BASE_DIR = path.resolve(__dirname, '..', 'proof-inputs'); // Base dir for output
-
-// Load authority keys once (assuming PODs in input file were signed with this)
-// This is still needed for signature verification
-const AUTHORITY_PUBLIC_KEY_STR = loadPublicKey();
-
-// Define local interface for Owner type from params file
-interface ParamsOwnerInput {
-  semaphoreV3?: { commitment: string }; // Expect string from JSON
-  semaphoreV4?: { publicKey: [string, string] }; // Expect strings from JSON
-  externalNullifier?: PODValue;
+// --- Type Definitions for Input (params.json) ---
+interface ParamsOwnerV4Input { 
+  publicKey: [string, string]; 
+  secretScalar?: string;       
+  identityCommitment?: string;
 }
 
-// Define local interface for the params file structure
-interface ExampleParams {
+interface ParamsOwnerInput {
+  semaphoreV3?: { commitment: string };
+  semaphoreV4?: ParamsOwnerV4Input; 
+  externalNullifier?: JSONPODValue;
+}
+
+interface ExampleParams { // Type for the content of params.json
     pods: { [contentId: string]: JSONPOD }; 
     podConfigMapping: { [configKey: string]: string }; 
-    membershipLists?: PODMembershipLists;
+    membershipLists?: PODMembershipLists; // Should be JSON-compatible PODMembershipLists (e.g. Record<string, JSONPODValue[]>) if it contains complex types
     owner?: ParamsOwnerInput;
-    watermark?: PODValue;
-    // Add other potential parameters here
+    watermark?: JSONPODValue; 
 }
 
-// --- Main Generation Logic ---
+// --- Type Definition for Output (_gpc_inputs.json) ---
+interface GPCInputsJSONOwnerV4 {
+    publicKey: [string, string];
+    secretScalar?: string;
+    identityCommitment?: string;
+}
+interface GPCInputsJSONOwner {
+    semaphoreV3?: { commitment: string };
+    semaphoreV4?: GPCInputsJSONOwnerV4;
+    externalNullifier?: JSONPODValue;
+}
 
-async function generateGPCInputs(configFilePath: string, paramsFilePath: string) {
-  console.log("--- Generating GPC Proof Inputs using Config and Params File ---");
+interface GPCInputsJSON { // Type for the structure to be written to _gpc_inputs.json
+    pods: Record<string, JSONPOD>; // Keys are configKeys (e.g., "location", "item2")
+    podConfigMapping: { [configKey: string]: string }; // Maps configKey to contentID
+    membershipLists?: PODMembershipLists; // Keeping as PODMembershipLists for now, assuming it's JSON serializable in its current use.
+                                        // If it holds complex PODValues, it should be JSONPODValues for the JSON file.
+    owner?: GPCInputsJSONOwner;
+    watermark?: JSONPODValue;
+}
 
-  if (!configFilePath || !paramsFilePath) {
-      console.error("Error: Config path and params path arguments are required.");
-      console.error(`Usage: ts-node ${path.basename(__filename)} <path/to/config.ts> <path/to/params.json>`);
-      process.exit(1);
+// --- Helper Functions ---
+
+// Function to ensure all PODs referenced in podConfigMapping exist in params.pods
+function validatePodMappings(params: ExampleParams): void {
+    for (const contentId of Object.values(params.podConfigMapping)) {
+        if (!params.pods[contentId]) {
+            throw new Error(`Mapping validation failed: ContentId '${contentId}' found in podConfigMapping but not in params.pods.`);
+        }
+    }
+}
+
+export function generateGPCInputs(
+  config: GPCProofConfig,
+  params: ExampleParams, // Input is the parsed params.json content
+  skipContentIDCheck = false
+): GPCInputsJSON { // Returns a structure ready for JSON serialization
+  console.log("Deserializing and verifying PODs based on config keys and params mapping...");
+  
+  validatePodMappings(params); // Validate mappings first
+
+  const finalPodsForJSON: Record<string, JSONPOD> = {}; // Will be keyed by configKey
+
+  // Iterate over the config.pods to ensure we only process PODs defined in the config
+  for (const [configKey, podKeySettings] of Object.entries(config.pods)) {
+    const contentId = params.podConfigMapping[configKey];
+    if (!contentId) {
+      throw new Error(`Mapping missing: No contentId found for config key '${configKey}' in params.podConfigMapping.`);
+    }
+
+    const jsonPodFromParams = params.pods[contentId]; // Fetch POD data using contentId
+    if (!jsonPodFromParams) {
+      throw new Error(`POD data missing: No POD found for contentId '${contentId}' (mapped from config key '${configKey}').`);
+    }
+
+    // Basic validation of the object read from params
+    if (typeof jsonPodFromParams.entries !== 'object' || jsonPodFromParams.entries === null) {
+        throw new Error(`Invalid POD structure for contentId '${contentId}': missing or invalid 'entries'.`);
+    }
+    if (typeof jsonPodFromParams.signature !== 'string') {
+        throw new Error(`Invalid POD structure for contentId '${contentId}': missing or invalid 'signature'.`);
+    }
+    if (typeof jsonPodFromParams.signerPublicKey !== 'string') {
+        throw new Error(`Invalid POD structure for contentId '${contentId}': missing or invalid 'signerPublicKey'.`);
+    }
+
+    // Create the standard JSONPOD object for output, excluding contentID
+    const standardJsonPod: JSONPOD = {
+        entries: jsonPodFromParams.entries, // Restore original entries
+        signature: jsonPodFromParams.signature,
+        signerPublicKey: jsonPodFromParams.signerPublicKey
+    };
+
+    // Store the standard JSONPOD using configKey as the key
+    finalPodsForJSON[configKey] = standardJsonPod; 
+    console.log(`  Processed POD for config key '${configKey}' (contentId: ${contentId}) -> stored under key '${configKey}' (excluding contentID field)`);
   }
 
-  // Resolve paths relative to the current working directory
-  const absoluteConfigPath = path.resolve(process.cwd(), configFilePath);
-  const absoluteParamsPath = path.resolve(process.cwd(), paramsFilePath);
+  let finalOwnerForJSON: GPCInputsJSONOwner | undefined = undefined;
+  const ownerFromParams = params.owner;
 
-  let proofConfig: GPCProofConfig;
-  const configFileName = path.basename(absoluteConfigPath);
-  console.log(`Loading config from: ${absoluteConfigPath}`);
-  try {
-    const configModule = require(absoluteConfigPath);
-    const exportKey = Object.keys(configModule)[0];
-    proofConfig = configModule[exportKey];
-    if (!proofConfig || !proofConfig.pods) {
-        throw new Error(`Could not find exported config with a 'pods' property.`);
+  if (ownerFromParams && typeof ownerFromParams === 'object') {
+    finalOwnerForJSON = {};
+
+    if (ownerFromParams.semaphoreV3?.commitment) {
+      finalOwnerForJSON.semaphoreV3 = { commitment: ownerFromParams.semaphoreV3.commitment };
     }
-    console.log(`Successfully loaded config: ${exportKey}`);
-  } catch (error: any) {
-    console.error(`Error loading proof config: ${error.message}`);
+
+    if (ownerFromParams.semaphoreV4?.publicKey) {
+      finalOwnerForJSON.semaphoreV4 = { publicKey: ownerFromParams.semaphoreV4.publicKey };
+      if (ownerFromParams.semaphoreV4.secretScalar !== undefined) {
+        finalOwnerForJSON.semaphoreV4.secretScalar = ownerFromParams.semaphoreV4.secretScalar;
+      }
+      if (ownerFromParams.semaphoreV4.identityCommitment !== undefined) {
+        finalOwnerForJSON.semaphoreV4.identityCommitment = ownerFromParams.semaphoreV4.identityCommitment;
+      }
+    }
+
+    if (ownerFromParams.externalNullifier !== undefined) {
+      finalOwnerForJSON.externalNullifier = ownerFromParams.externalNullifier;
+    }
+  }
+  
+  // Process membershipLists: Ensure they are in a JSON-compatible format if they contain complex types.
+  // For GPC.ts, PODMembershipLists is Record<PODName, PODValue[]>.
+  // If these PODValues are complex (BigInts, etc.), they need to be JSONPODValues for the file.
+  // podValueFromJSON was used previously, which implies the input might be JSONPODValue.
+  // Let's assume params.membershipLists is already structured correctly for JSON output if it exists.
+  // If it were Record<PODName, PODValue[]>, we'd need to convert PODValue to JSONPODValue here.
+  // Since it's from params.json, it should already be JSON-compatible.
+
+  const gpcInputsJSON: GPCInputsJSON = {
+    pods: finalPodsForJSON,
+    podConfigMapping: params.podConfigMapping,
+    membershipLists: params.membershipLists, // Assumed to be JSON-compatible from params.json
+    owner: finalOwnerForJSON,
+    watermark: params.watermark, // Assumed to be JSONPODValue from params.json
+  };
+
+  // Final check: Ensure all PODs defined in config.pods via podConfigMapping are included in gpcInputsJSON.pods
+  for (const configKey of Object.keys(config.pods)) {
+    const contentId = gpcInputsJSON.podConfigMapping[configKey];
+    if (!contentId || !gpcInputsJSON.pods[configKey]) { // Check for existence of configKey in gpcInputsJSON.pods
+        throw new Error(`Consistency check failed: POD for config key '${configKey}' is missing in the final GPC inputs JSON.`);
+    }
+  }
+
+  console.log("Successfully generated GPC inputs structure for JSON serialization.");
+  return gpcInputsJSON;
+}
+
+// NEW main function for manual argument parsing
+async function main() {
+  console.log("--- Generating GPC Proof Inputs using Config and Params File (Manual Arg Parse) ---");
+
+  const args = process.argv.slice(2); // Skip node and script path
+
+  let configPathArg: string | undefined;
+  let paramsPathArg: string | undefined;
+  let outputPathArg: string | undefined;
+  let skipContentIdCheckArg = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--config' && i + 1 < args.length) {
+      configPathArg = args[++i];
+    } else if (args[i] === '--params' && i + 1 < args.length) {
+      paramsPathArg = args[++i];
+    } else if (args[i] === '--output' && i + 1 < args.length) {
+      outputPathArg = args[++i];
+    } else if (args[i] === '--skip-contentid-check') {
+      skipContentIdCheckArg = true;
+    }
+  }
+
+  if (!configPathArg || !paramsPathArg || !outputPathArg) {
+    console.error("Error: Missing required arguments.");
+    console.error("Usage: ts-node <script_name> --config <configFile> --params <paramsFile> --output <outputFile> [--skip-contentid-check]");
     process.exit(1);
   }
 
-  let params: ExampleParams;
-  console.log(`Loading parameters from: ${absoluteParamsPath}`);
-  try {
-    const paramsFileContent = await fs.readFile(absoluteParamsPath, 'utf-8');
-    // <<< Parse without custom reviver >>>
-    const parsedParams = JSON.parse(paramsFileContent);
-    if (!parsedParams || typeof parsedParams !== 'object') {
-        throw new Error("Invalid params file content.");
-    }
+  const configPath = path.resolve(process.cwd(), configPathArg);
+  const paramsPath = path.resolve(process.cwd(), paramsPathArg);
+  const gpcInputsPath = path.resolve(process.cwd(), outputPathArg);
 
-    // <<< Manually parse membershipLists and watermark using podValueFromJSON >>>
-    let deserializedMembershipLists: GPCProofInputs['membershipLists'] = undefined;
-    if (parsedParams.membershipLists && typeof parsedParams.membershipLists === 'object') {
-        deserializedMembershipLists = {};
-        for (const listName in parsedParams.membershipLists) {
-            if (Object.prototype.hasOwnProperty.call(parsedParams.membershipLists, listName)) {
-                const jsonList = parsedParams.membershipLists[listName];
-                if (!Array.isArray(jsonList)) {
-                    throw new Error(`Params membership list '${listName}' is not an array.`);
-                }
-                // Correctly parse based on expected type (PODValue[] or PODValue[][])
-                if (jsonList.length > 0 && Array.isArray(jsonList[0])) {
-                    // Assume it's a list of tuples (PODValue[][])
-                    deserializedMembershipLists[listName] = jsonList.map((jsonTuple: any[], tupleIndex: number) =>
-                        jsonTuple.map((jsonItem, itemIndex) =>
-                            podValueFromJSON(jsonItem, `${listName}[${tupleIndex}][${itemIndex}]`)
-                        )
-                    ) as PODValue[][];
-                } else {
-                    // Assume it's a list of single values (PODValue[])
-                    deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) =>
-                        podValueFromJSON(jsonItem, `${listName}[${index}]`)
-                    ) as PODValue[];
-                }
+  console.log(`Loading config from: ${configPath}`);
+  let configData: GPCProofConfig;
+  try {
+    const configModule = require(configPath);
+    let foundConfig: GPCProofConfig | undefined = undefined;
+    let foundKey: string | undefined = undefined;
+
+    // Iterate through exports to find the config object
+    for (const key in configModule) {
+        if (Object.prototype.hasOwnProperty.call(configModule, key)) {
+            const potentialConfig = configModule[key];
+            // Structural check: does it have a 'pods' object?
+            if (potentialConfig && typeof potentialConfig === 'object' && potentialConfig.pods && typeof potentialConfig.pods === 'object') {
+                foundConfig = potentialConfig as GPCProofConfig; // Cast after check
+                foundKey = key;
+                break; // Found the first one, stop looking
             }
         }
     }
 
-    const deserializedWatermark = parsedParams.watermark
-        ? podValueFromJSON(parsedParams.watermark, 'watermark')
-        : undefined;
-
-    // Apply the reviver during JSON.parse <<< REMOVED >>>
-    // params = JSON.parse(paramsFileContent, jsonBigIntReviver) as ExampleParams;
-    // <<< Assign parsed parts to the params variable >>>
-    params = {
-        pods: parsedParams.pods, // Assume pods are already JSONPOD, handled later
-        podConfigMapping: parsedParams.podConfigMapping,
-        membershipLists: deserializedMembershipLists,
-        owner: parsedParams.owner, // Assume owner doesn't need deep parsing here
-        watermark: deserializedWatermark
-        // Add other potential parameters here
-    };
-    console.log("Successfully loaded and parsed parameters."); // <<< Updated log message
-
-    if (!params.pods || typeof params.pods !== 'object') {
-        throw new Error("Params file must contain a 'pods' object.");
+    if (!foundConfig) {
+        throw new Error('Could not find a valid GPCProofConfig export in the config file.');
     }
-    if (!params.podConfigMapping || typeof params.podConfigMapping !== 'object') {
-        throw new Error("Params file must contain a 'podConfigMapping' object.");
-    }
-  } catch (error: any) {
-    console.error(`Error loading or validating parameters file: ${error.message}`);
+    configData = foundConfig; // Assign the found config
+    console.log(`Successfully loaded config exported as: ${foundKey || 'unknown'}`); // Log the key name
+
+  } catch (e:any) {
+    console.error(`Error loading or finding config in ${configPath}:`, e);
     process.exit(1);
   }
 
-  console.log("Deserializing and verifying PODs based on config keys and params mapping...");
-  const mappedPods: Record<string, POD> = {};
-  const configPodKeys = Object.keys(proofConfig.pods);
-
+  console.log(`Loading parameters from: ${paramsPath}`);
+  let parsedParams: ExampleParams;
   try {
-    for (const configKey of configPodKeys) {
-        console.log(`  Processing POD for config key '${configKey}'...`);
-        
-        const contentId = params.podConfigMapping[configKey];
-        if (!contentId) {
-            throw new Error(`Mapping missing: No contentId found for config key '${configKey}' in params.podConfigMapping.`);
-        }
-        
-        const jsonPodData = params.pods[contentId];
-        if (!jsonPodData) {
-            throw new Error(`POD data missing: No POD found for contentId '${contentId}' (mapped from config key '${configKey}') in params.pods.`);
-        }
-
-        const podInstance = POD.fromJSON(jsonPodData);
-        const isSigValid = await podInstance.verifySignature();
-        if (!isSigValid) {
-            throw new Error(`Signature verification failed for POD with contentId '${contentId}' (config key '${configKey}').`);
-        }
-        if (podInstance.signerPublicKey !== AUTHORITY_PUBLIC_KEY_STR) {
-            throw new Error(`Signer public key mismatch for POD with contentId '${contentId}' (config key '${configKey}').`);
-        }
-
-        mappedPods[configKey] = podInstance;
-        console.log(`    OK: Verified POD with contentId '${contentId}' and mapped to config key '${configKey}'.`);
-    }
-    
-    const mappedContentIds = new Set(Object.values(params.podConfigMapping));
-    for (const contentId in params.pods) {
-        if (!mappedContentIds.has(contentId)) {
-            console.warn(`Warning: POD with contentId '${contentId}' found in params.pods but not used by params.podConfigMapping.`);
-        }
-    }
-
-  } catch (error: any) {
-      console.error("Error during POD processing:", error.message);
-      console.error(error.stack);
-      process.exit(1);
-  }
-  console.log("All required PODs processed and mapped successfully.");
-
-  console.log("Assembling final GPCProofInputs object...");
-  const proofInputs: GPCProofInputs = {
-      pods: mappedPods,
-      membershipLists: params.membershipLists,
-      owner: params.owner as GPCProofInputs['owner'],
-      watermark: params.watermark
-  };
-  console.log("GPCProofInputs object assembled.");
-
-  const configBaseName = path.basename(configFileName, path.extname(configFileName));
-  const outputDir = OUTPUT_BASE_DIR;
-  const outputPath = path.join(outputDir, `${configBaseName}_gpc_inputs.json`);
-
-  try {
-      console.log(`Writing final GPCProofInputs to ${outputPath}...`);
-      await fs.mkdir(outputDir, { recursive: true });
-
-      // Manually serialize membershipLists before writing
-      let outputDataToWrite: any = { ...proofInputs }; // Start with a copy
-      if (outputDataToWrite.membershipLists) {
-          const serializedMembershipLists: any = {};
-          for (const listName in outputDataToWrite.membershipLists) {
-                const list = outputDataToWrite.membershipLists[listName];
-                // Ensure list is an array before mapping
-                if (Array.isArray(list)) {
-                    serializedMembershipLists[listName] = list.map((item: any) => {
-                        // Handle both single PODValues and tuples (arrays of PODValues)
-                        if (Array.isArray(item)) { // It's a tuple
-                            return item.map((podValue: any) => podValueToJSON(podValue));
-                        } else { // It's a single PODValue
-                            return podValueToJSON(item);
-                        }
-                    });
-                } else {
-                    // Handle potential malformed input gracefully (or throw)
-                    console.warn(`Membership list '${listName}' is not an array, skipping serialization.`);
-                    serializedMembershipLists[listName] = list; // Keep original if not array
-                }
-          }
-          outputDataToWrite.membershipLists = serializedMembershipLists;
-      }
-      // Also serialize watermark if it exists
-      if (outputDataToWrite.watermark) {
-          outputDataToWrite.watermark = podValueToJSON(outputDataToWrite.watermark);
-      }
-      // Note: Assuming owner structure doesn't contain PODValues needing serialization
-      // If it does, similar logic would be needed here.
-
-      // Pass the object with serialized lists to writeJsonFile
-      await writeJsonFile(outputPath, outputDataToWrite); // Use outputDataToWrite
-  } catch (e: any) {
-      console.error(`Failed to write final GPCProofInputs file: ${e.message}`);
-      process.exit(1);
+    const paramsContent = await fs.readFile(paramsPath, 'utf-8');
+    // Use podValueFromJSON as reviver to handle BigInts correctly during initial parse for specific known fields if necessary,
+    // but ExampleParams expects strings for bigints, which JSON.parse does by default.
+    // The conversion to BigInt happens inside generateGPCInputs where GPCProofInputs types are constructed.
+    parsedParams = JSON.parse(paramsContent) as ExampleParams;
+    console.log("Successfully loaded and parsed parameters.");
+  } catch (e:any) {
+    console.error(`Error loading or parsing parameters file ${paramsPath}:`, e);
+    process.exit(1);
   }
 
-  console.log("--- GPC Proof Input Generation Complete ---");
+  try {
+    // Generate the GPC inputs object (JSON-compatible structure)
+    const gpcInputsObjectForJSON = generateGPCInputs(configData, parsedParams, skipContentIdCheckArg);
+
+    // Ensure output directory exists
+    const outputDir = path.dirname(gpcInputsPath);
+    await fs.mkdir(outputDir, { recursive: true });
+
+    // Write the GPC inputs to the specified output file
+    await fs.writeFile(gpcInputsPath, JSON.stringify(gpcInputsObjectForJSON, null, 2));
+    console.log(`Successfully wrote GPC inputs to ${gpcInputsPath}`);
+    console.log("--- GPC Proof Inputs Generation Finished ---");
+
+  } catch (error:any) {
+    console.error('Error during GPC inputs generation:', error);
+    process.exit(1);
+  }
 }
 
-// --- Script Execution ---
-const args = process.argv.slice(2);
-const configArg = args[0];
-const paramsArg = args[1];
-
-generateGPCInputs(configArg, paramsArg).catch(error => {
-  console.error("An unexpected error occurred:", error);
-  process.exit(1);
-}); 
+if (require.main === module) {
+    main().catch(error => {
+        console.error("Unhandled error in main execution:", error);
+        process.exit(1);
+    });
+} 

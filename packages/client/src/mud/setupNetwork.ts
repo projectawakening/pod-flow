@@ -12,10 +12,11 @@ import {
   Hex,
   ClientConfig,
   getContract,
+  type Abi,
 } from "viem";
 import { syncToZustand } from "@latticexyz/store-sync/zustand";
-import { getNetworkConfig } from "./getNetworkConfig";
-import IWorldAbi from "contracts/out/IWorld.sol/IWorld.abi.json";
+import { getNetworkConfig } from "./getNetworkConfig.js";
+import IWorldAbi from "../../../contracts/out/IWorld.sol/IWorld.abi.json" assert { type: "json" };
 import { createBurnerAccount, transportObserver, ContractWrite } from "@latticexyz/common";
 import { transactionQueue, writeObserver } from "@latticexyz/common/actions";
 import { Subject, share } from "rxjs";
@@ -28,7 +29,7 @@ import { Subject, share } from "rxjs";
  * See https://mud.dev/templates/typescript/contracts#mudconfigts
  * for the source of this information.
  */
-import mudConfig from "contracts/mud.config";
+import mudConfig from "../../../contracts/mud.config.js";
 
 export type SetupNetworkResult = Awaited<ReturnType<typeof setupNetwork>>;
 
@@ -70,7 +71,7 @@ export async function setupNetwork() {
    */
   const worldContract = getContract({
     address: networkConfig.worldAddress as Hex,
-    abi: IWorldAbi,
+    abi: IWorldAbi as Abi,
     client: { public: publicClient, wallet: burnerWalletClient },
   });
 
@@ -83,7 +84,7 @@ export async function setupNetwork() {
   const { tables, useStore, latestBlock$, storedBlockLogs$, waitForTransaction } = await syncToZustand({
     config: mudConfig,
     address: networkConfig.worldAddress as Hex,
-    publicClient,
+    publicClient: publicClient,
     startBlock: BigInt(networkConfig.initialBlockNumber),
   });
 

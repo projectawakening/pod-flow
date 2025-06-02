@@ -62,14 +62,45 @@ async function checkArtifactsExist(circuitId: string): Promise<boolean> {
     }
 }
 
-// Function to determine if circuit A is "smaller" than circuit B
-// Definition of smaller: fewer entries, then fewer objects.
+// Function to determine if circuit A is "smaller" (more optimal fit) than circuit B.
+// "Smaller" means it's closer to the minimum required parameters.
 function isSmallerCircuit(circuitA: SupportedGPCCircuitParams, circuitB: SupportedGPCCircuitParams): boolean {
     if (circuitA.maxEntries < circuitB.maxEntries) return true;
     if (circuitA.maxEntries > circuitB.maxEntries) return false;
-    // If entries are equal, compare objects
+
+    // Entries are equal, compare objects
     if (circuitA.maxObjects < circuitB.maxObjects) return true;
-    // Add other criteria if needed (e.g., numeric values, inequalities)
+    if (circuitA.maxObjects > circuitB.maxObjects) return false;
+
+    // Objects are equal, compare merkleMaxDepth
+    if (circuitA.merkleMaxDepth < circuitB.merkleMaxDepth) return true;
+    if (circuitA.merkleMaxDepth > circuitB.merkleMaxDepth) return false;
+
+    // Merkle depth is equal, compare maxNumericValues
+    if (circuitA.maxNumericValues < circuitB.maxNumericValues) return true;
+    if (circuitA.maxNumericValues > circuitB.maxNumericValues) return false;
+
+    // Numeric values are equal, compare maxEntryInequalities
+    if (circuitA.maxEntryInequalities < circuitB.maxEntryInequalities) return true;
+    if (circuitA.maxEntryInequalities > circuitB.maxEntryInequalities) return false;
+
+    // Inequalities are equal, compare maxLists
+    if (circuitA.maxLists < circuitB.maxLists) return true;
+    if (circuitA.maxLists > circuitB.maxLists) return false;
+
+    // Lists are equal, compare maxListElements
+    if (circuitA.maxListElements < circuitB.maxListElements) return true;
+    if (circuitA.maxListElements > circuitB.maxListElements) return false;
+
+    // List elements are equal, compare maxTuples
+    if (circuitA.maxTuples < circuitB.maxTuples) return true;
+    if (circuitA.maxTuples > circuitB.maxTuples) return false;
+
+    // Tuples are equal, compare tupleArity
+    if (circuitA.tupleArity < circuitB.tupleArity) return true;
+    if (circuitA.tupleArity > circuitB.tupleArity) return false;
+    
+    // If all compared parameters are equal, A is not strictly smaller than B
     return false;
 }
 
@@ -118,7 +149,8 @@ async function findCircuit(requirementsPath: string) {
     if (bestMatch && bestMatch.circuitId) {
         // Output should just be the circuitId, the calling script figures out paths
         console.log(`--- Found best matching compiled circuit: ${bestMatch.circuitId} ---`);
-        console.log(bestMatch.circuitId); // Print the circuitId to stdout
+        console.log(`CIRCUIT_NAME: ${bestMatch.circuitId}`);
+        console.log(bestMatch.circuitId); // Print the circuitId to stdout for capture
     } else {
         const configName = path.basename(absoluteRequirementsPath, '_requirements.json');
         console.log(`--- No suitable compiled circuit found for: ${configName} ---`);

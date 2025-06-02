@@ -1,0 +1,27 @@
+{
+  "pods": {
+    "13045973816869894084305961367301921331809230618719830787518885035146604387027": {
+      "entries": {
+        "keccak256_merkle_root": "0x3b4588b54d923f4c8cc4cd95309e68a7bc096ea3f264519f659df0d74b819856",
+        "location_x_high": 0,
+        "location_x_low": 100,
+        "location_y_high": 0,
+        "location_y_low": 200,
+        "location_z_high": 0,
+        "location_z_low": 300,
+        "objectId": {
+          "cryptographic": "0x546f601774410ed85e99e739fb228cbe"
+        },
+        "pod_data_type": "evefrontier.location_attestation",
+        "solarSystemId": 30010690,
+        "timestamp": 1746864380723
+      },
+      "signature": "KujhATQgv24zpc46wDLK4+FhhKxeR9/rG+6VX6FVeZEyAP6Zp0ta20O10NIJebVNMXs1NwGKq+63uYbfBdyfAQ",
+      "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+    }
+  },
+  "podConfigMapping": {
+    "pod": "13045973816869894084305961367301921331809230618719830787518885035146604387027"
+  },
+  "membershipLists": {}
+}

@@ -1,0 +1,89 @@
+{
+  "proof": {
+    "pi_a": [
+      "1959778356429557482954064561785278018498421799695346432774980487419700739088",
+      "11277912461668674360813008680101076035211687702175453099439949439482612871486",
+      "1"
+    ],
+    "pi_b": [
+      [
+        "7683338812708785775576946007232089763353489909952002632847278889138026590453",
+        "8306665728116122507203250339924955289404230434984264840878131086956275078000"
+      ],
+      [
+        "21119437036508457213714126831764703775407430069917593079519282786654151904308",
+        "21301739955278577040903657941457348982514261449042990526106164425277900919661"
+      ],
+      [
+        "1",
+        "0"
+      ]
+    ],
+    "pi_c": [
+      "11544707461964510430596122113530158326102239883176769708863228703757829030608",
+      "21587980942419004939084404028162891332592342183275828249439763667944082168852",
+      "1"
+    ],
+    "protocol": "groth16",
+    "curve": "bn128"
+  },
+  "boundConfig": {
+    "circuitIdentifier": "proto-pod-gpc_1o-8e-5md-0nv-0ei-0x0l-0x0t-0ov3-0ov4",
+    "pods": {
+      "distance": {
+        "entries": {
+          "distanceSquaredMeters": {
+            "isRevealed": true
+          },
+          "object1Location": {
+            "isRevealed": true
+          },
+          "object2Location": {
+            "isRevealed": true
+          },
+          "objectId1": {
+            "isRevealed": true
+          },
+          "objectId2": {
+            "isRevealed": true
+          },
+          "pod_data_type": {
+            "isRevealed": true
+          },
+          "timeThreshold": {
+            "isRevealed": true
+          },
+          "timestamp": {
+            "isRevealed": true
+          }
+        },
+        "contentID": {
+          "isRevealed": true
+        }
+      }
+    }
+  },
+  "revealedClaims": {
+    "pods": {
+      "distance": {
+        "entries": {
+          "distanceSquaredMeters": 4,
+          "object1Location": "0x5d247cd92a35b66e67db4122d06660e91f600abaea0b77084d4fa6022f57e0fb",
+          "object2Location": "0x6f46877fba7983665d10a4f5354bd08fd108b1c7c3f7d2a84666bb7bd744cfdd",
+          "objectId1": {
+            "cryptographic": "0x546f601774410ed85e99e739fb228cbe"
+          },
+          "objectId2": {
+            "cryptographic": "0x2ef78d73724430637f80cc2448a49e4fe"
+          },
+          "pod_data_type": "evefrontier.distance_attestation",
+          "timeThreshold": 10000,
+          "timestamp": 1748594228958
+        },
+        "contentID": "0x156390159905d9cfb4e8b9dacf56fd72b752d21582d307f9052e291a7448b2cc",
+        "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+      }
+    },
+    "membershipLists": {}
+  }
+}

@@ -6,7 +6,9 @@ import { console } from "forge-std/console.sol";
 import { StoreSwitch } from "@latticexyz/store/src/StoreSwitch.sol";
 
 import { IWorld } from "../src/codegen/world/IWorld.sol";
-import { Tasks, TasksData } from "../src/codegen/index.sol";
+
+import { MerkleLeafFieldMap } from "../src/namespaces/evefrontier/codegen/tables/MerkleLeafFieldMap.sol";
+
 
 contract PostDeploy is Script {
   function run(address worldAddress) external {
@@ -18,15 +20,28 @@ contract PostDeploy is Script {
 
     // Start broadcasting transactions from the deployer account
     vm.startBroadcast(deployerPrivateKey);
+    // pre-define our data attestation POD merkle leaf field map
+    // podTypeId is the keccak256 hash of the string "pod_data_type" concatenated with the keccak256 hash of the string "evefrontier.distance_attestation"
+    bytes32 podTypeId = keccak256(abi.encode("evefrontier.distance_attestation"));
+    
+    // uint256 object1Id;
+    bytes32 object1Id = keccak256(abi.encode("object1Id"));
+    // uint256 object2Id;
+    bytes32 object2Id = keccak256(abi.encode("object2Id"));
+    // uint256 distanceSquaredMeters;
+    bytes32 distanceSquaredMeters = keccak256(abi.encode("distanceSquaredMeters"));
+    // uint256 timestamp;
+    bytes32 timestamp = keccak256(abi.encode("timestamp"));
+    // uint256 timeThreshold;
+    bytes32 timeThreshold = keccak256(abi.encode("timeThreshold"));
 
-    // We can set table records directly
-    Tasks.set("1", TasksData({ description: "Walk the dog", createdAt: block.timestamp, completedAt: 0 }));
-
-    // Or we can call our own systems
-    IWorld(worldAddress).app__addTask("Take out the trash");
-
-    bytes32 key = IWorld(worldAddress).app__addTask("Do the dishes");
-    IWorld(worldAddress).app__completeTask(key);
+    // set DistanceAttestationParams
+    MerkleLeafFieldMap.set(podTypeId, podTypeId, "pod_data_type");
+    MerkleLeafFieldMap.set(podTypeId, object1Id, "object1Id");
+    MerkleLeafFieldMap.set(podTypeId, object2Id, "object2Id");
+    MerkleLeafFieldMap.set(podTypeId, timeThreshold, "timeThreshold");
+    MerkleLeafFieldMap.set(podTypeId, distanceSquaredMeters, "distanceSquaredMeters");
+    MerkleLeafFieldMap.set(podTypeId, timestamp, "timestamp");
 
     vm.stopBroadcast();
   }

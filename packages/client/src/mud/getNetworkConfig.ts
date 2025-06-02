@@ -15,12 +15,12 @@ import { getBurnerPrivateKey } from "@latticexyz/common";
  * from packages/contracts/worlds.json. When the contracts package
  * deploys a new `World`, it updates this file.
  */
-import worlds from "contracts/worlds.json";
+import worlds from "../../../contracts/worlds.json" assert { type: "json" };
 
 /*
  * The supported chains.
  */
-import { supportedChains } from "./supportedChains";
+import { supportedChains } from "./supportedChains.js";
 
 export async function getNetworkConfig() {
   const params = new URLSearchParams(window.location.search);
@@ -38,7 +38,7 @@ export async function getNetworkConfig() {
   /*
    * Find the chain (unless it isn't in the list of supported chains).
    */
-  const chainIndex = supportedChains.findIndex((c) => c.id === chainId);
+  const chainIndex = supportedChains.findIndex((c: { id: number }) => c.id === chainId);
   const chain = supportedChains[chainIndex];
   if (!chain) {
     throw new Error(`Chain ${chainId} not found`);
@@ -49,7 +49,7 @@ export async function getNetworkConfig() {
    * different address than the one in worlds.json,
    * provide it as worldAddress in the query string.
    */
-  const world = worlds[chain.id.toString()];
+  const world = (worlds as any)[chain.id.toString()];
   const worldAddress = params.get("worldAddress") || world?.address;
   if (!worldAddress) {
     throw new Error(`No world address found for chain ${chainId}. Did you run \`mud deploy\`?`);

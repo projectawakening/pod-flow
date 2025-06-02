@@ -17,11 +17,15 @@ import {
     paramMaxVirtualEntries
 } from "@pcd/gpcircuits";
 import { groth16 } from "snarkjs";
-import { POD, podValueFromJSON, PODValue } from '@pcd/pod';
+import { POD, podValueFromJSON, PODValue, JSONPODValue } from '@pcd/pod';
 import { readJsonFile, writeJsonFile } from '../../pods/utils/fsUtils'; // Adjust path as needed
+// Import local parameter sets for lookup
+import { SupportedGPCCircuitParams, supportedParameterSets } from '../src/circuitParameterSets';
 
 // Define the base directory for artifacts (needed by gpcVerify)
 const ARTIFACTS_BASE_DIR = path.resolve(__dirname, '..', 'artifacts');
+// <<< Define proof output directory >>>
+const PROOFS_DIR = path.resolve(__dirname, '..', 'proofs');
 
 // --- Helper Functions ---
 
@@ -103,18 +107,18 @@ async function findCircuitDescription(requirementsPath: string): Promise<ProtoPO
     try {
         const reqsJson = JSON.parse(await fs.readFile(requirementsPath, 'utf-8'));
         // Assuming GPCRequirements and ProtoPODGPCCircuitParams are compatible enough
-        requirements = reqsJson as ProtoPODGPCCircuitParams; 
+        requirements = reqsJson as ProtoPODGPCCircuitParams;
         console.log("Successfully loaded requirements:", requirements);
     } catch (error: any) {
         console.error(`Error loading requirements file ${requirementsPath}: ${error.message}`);
         console.error("Run generate-requirements script first.");
         throw error; // Re-throw to be caught by caller
     }
-    
+
     // Use the library's static methods via the class
     const circuitName = ProtoPODGPC.circuitNameForParams(requirements);
     const circuitDesc = ProtoPODGPC.findCircuit(PROTO_POD_GPC_FAMILY_NAME, circuitName);
-    
+
     if (!circuitDesc) {
         throw new Error(`Could not find a circuit description matching the requirements in the ProtoPODGPC family.`);
     }
@@ -143,9 +147,9 @@ function stringifyBigIntsRecursive(obj: any): any {
 
 // --- Main Proof Generation Function (Manual Flow) ---
 
-async function generateProof(configPath: string, inputsPath: string) {
+async function generateProof(configPath: string, inputsPath: string, artifactCircuitName: string) {
     logStep("Starting GPC Proof Generation (Manual Flow)...");
-    let circuitDesc: ProtoPODGPCCircuitDesc | undefined; // Define circuitDesc here
+    let circuitDesc: ProtoPODGPCCircuitDesc | undefined;
 
     try {
         // 1. Load Config and Inputs
@@ -153,69 +157,45 @@ async function generateProof(configPath: string, inputsPath: string) {
         const proofConfig = loadProofConfig(configPath);
         const proofInputs = await loadProofInputs(inputsPath);
 
-        // 2. Load Requirements and Construct Circuit Description
-        logStep("2. Loading requirements and constructing circuit description...");
-        const configBaseName = path.basename(configPath, path.extname(configPath));
-        const requirementsPath = path.join(__dirname, '..', 'proof-requirements', `${configBaseName}_requirements.json`);
-        let requirements: ProtoPODGPCCircuitParams;
-        try {
-            const reqsJson = JSON.parse(await fs.readFile(requirementsPath, 'utf-8'));
-            // <<< Explicitly construct the requirements object >>>
-            requirements = {
-                maxObjects: reqsJson.nObjects,
-                maxEntries: reqsJson.nEntries,
-                merkleMaxDepth: reqsJson.merkleMaxDepth,
-                maxNumericValues: reqsJson.nNumericValues,
-                maxEntryInequalities: reqsJson.nEntryInequalities,
-                maxLists: reqsJson.nLists,
-                maxListElements: reqsJson.maxListSize, // Map name from requirements file
-                // <<< Handle tupleArities - assume 0 if empty/missing >>>
-                maxTuples: Object.keys(reqsJson.tupleArities || {}).length,
-                tupleArity: Object.keys(reqsJson.tupleArities || {}).length > 0 
-                    ? Math.max(...Object.values(reqsJson.tupleArities || {}).map(Number)) // Ensure values are numbers
-                    : 0,
-                includeOwnerV3: reqsJson.includeOwnerV3 ?? false,
-                includeOwnerV4: reqsJson.includeOwnerV4 ?? false
-            }; 
-            console.log("Successfully loaded and constructed requirements object:", requirements);
-        } catch (error: any) {
-            console.error(`Error loading/processing requirements file ${requirementsPath}: ${error.message}`);
-            throw new Error("Failed to construct circuit description."); // Should not happen if requirements load
+        // 2. Find Circuit Description based on provided artifactCircuitName
+        logStep(`2. Finding circuit description for artifact target: ${artifactCircuitName}`);
+        const foundParams = supportedParameterSets.find(p => p.circuitId === artifactCircuitName);
+        if (!foundParams) {
+            // This *shouldn't* happen if the orchestrator script works correctly
+            throw new Error(`Could not find parameters in local circuitParameterSets.ts for circuitId: ${artifactCircuitName}`);
         }
-
-        // Construct the circuit description directly
-        const circuitName = ProtoPODGPC.circuitNameForParams(requirements);
         circuitDesc = {
             family: PROTO_POD_GPC_FAMILY_NAME,
-            name: circuitName,
-            cost: 0, // Placeholder cost
-            ...requirements // Spread the loaded requirements
+            name: artifactCircuitName,
+            cost: 0, // Placeholder
+            ...foundParams // Spread the found parameters
         };
-        const circuitIdentifier = `${circuitDesc.family}_${circuitDesc.name}`;
-  
-        // Check if circuitDesc is valid before proceeding
+        console.log("  Found circuit description:", circuitDesc);
+
+        // Ensure circuitDesc is valid before proceeding
         if (!circuitDesc) {
-             throw new Error("Failed to construct circuit description."); // Should not happen if requirements load
+             // This check is now redundant if foundParams check passed, but keep for safety
+             throw new Error("Failed to determine circuit description.");
         }
 
-        // <<< Add circuitIdentifier to proofConfig >>>
-        proofConfig.circuitIdentifier = circuitIdentifier as GPCIdentifier; // <<< Type assertion
-  
-        // 3. Call gpcPreProve
+        // Update proofConfig with the correct full identifier
+        proofConfig.circuitIdentifier = `${PROTO_POD_GPC_FAMILY_NAME}_${circuitDesc.name}` as GPCIdentifier;
+
+        // 3. Call gpcPreProve (using the circuitDesc matching the artifacts)
         logStep("3. Calling gpcPreProve...");
-        const preProveResult = gpcPreProve(proofConfig, proofInputs, [circuitDesc]); 
+        const preProveResult = gpcPreProve(proofConfig, proofInputs, [circuitDesc]);
         const { circuitInputs, boundConfig } = preProveResult;
-        // Ensure circuitDesc from preProve matches (it should)
-        if (preProveResult.circuitDesc.name !== circuitDesc.name || preProveResult.circuitDesc.family !== circuitDesc.family) {
-            console.warn("Circuit description mismatch between requirement lookup and gpcPreProve result.");
-            // Use the one from preProveResult for consistency downstream
-            circuitDesc = preProveResult.circuitDesc; 
+
+        // Sanity check (optional but good)
+        if (preProveResult.circuitDesc.name !== circuitDesc.name) {
+            console.warn("Circuit description mismatch between lookup and gpcPreProve result. Using preProve result.");
+            circuitDesc = preProveResult.circuitDesc;
         }
 
-        // 4. Define Artifact Paths (using the confirmed circuitDesc/identifier)
-        const currentCircuitIdentifier = `${circuitDesc.family}_${circuitDesc.name}`;
-        logStep(`4. Defining artifact paths for: ${currentCircuitIdentifier}`);
-        const artifactsPath = ARTIFACTS_BASE_DIR; // Base directory
+        // 4. Define Artifact Paths (using artifactCircuitName)
+        const currentCircuitIdentifier = `${PROTO_POD_GPC_FAMILY_NAME}_${artifactCircuitName}`;
+        logStep(`4. Defining artifact paths using: ${currentCircuitIdentifier}`);
+        const artifactsPath = ARTIFACTS_BASE_DIR;
         const wasmPath = path.join(artifactsPath, `${currentCircuitIdentifier}.wasm`);
         const pkeyPath = path.join(artifactsPath, `${currentCircuitIdentifier}-pkey.zkey`);
 
@@ -231,123 +211,165 @@ async function generateProof(configPath: string, inputsPath: string) {
             throw error; // Re-throw
         }
 
+        // <<< Define Output Proof Paths >>>
+        // Use circuitDesc.name in the output filename
+        const proofFileNameBase = `${path.basename(configPath, '.ts')}_${circuitDesc.name}`; // e.g., locationProofConfig_3o-14e...
+        const outputProofJsonPath = path.join(PROOFS_DIR, `${proofFileNameBase}_proof.json`);
+        const outputPublicJsonPath = path.join(PROOFS_DIR, `${proofFileNameBase}_public.json`);
+        const outputCombinedJsonPath = path.join(PROOFS_DIR, `${proofFileNameBase}_combined.json`); // Keeping combined for now
+
+        // <<< Ensure output directory exists >>>
+        await fs.mkdir(PROOFS_DIR, { recursive: true });
+
         // 6. Call snarkjs.groth16.fullProve
         logStep("6. Calling snarkjs.groth16.fullProve...");
+
+        let snarkjsProof: any; // Use 'any' temporarily for snarkjs proof object
+        let snarkjsPublicSignals: string[]; // Array of strings
 
         try {
             const { proof, publicSignals } = await groth16.fullProve(
                 circuitInputs, // <<< Pass the original circuitInputs object with BigInts >>>
-                wasmPath, 
+                wasmPath,
                 pkeyPath
                 // logger // Optional: pass a logger object if needed
             );
+            snarkjsProof = proof; // Store the proof part
+            snarkjsPublicSignals = publicSignals; // Store the public signals
+
             console.log("groth16.fullProve call completed successfully.");
+
+            // <<< Save snarkjs proof.json and public.json >>>
+            logStep("Saving snarkjs proof.json and public.json...");
+            await writeJsonFile(outputProofJsonPath, snarkjsProof);
+            console.log(`  Saved proof to: ${outputProofJsonPath}`);
+            await writeJsonFile(outputPublicJsonPath, snarkjsPublicSignals);
+            console.log(`  Saved public signals to: ${outputPublicJsonPath}`);
 
             // 7. Reconstruct Circuit Outputs for gpcPostProve
             logStep("7. Reconstructing circuit outputs from public signals...");
             const circuitOutputs = ProtoPODGPC.outputsFromPublicSignals(
-                publicSignals.map(BigInt), // Ensure signals are BigInts
+                snarkjsPublicSignals.map(BigInt),
                 circuitDesc.maxEntries,
-                paramMaxVirtualEntries(circuitDesc), // <<< Use imported function
+                paramMaxVirtualEntries(circuitDesc),
                 circuitDesc.includeOwnerV3,
                 circuitDesc.includeOwnerV4
             );
 
             // 8. Call gpcPostProve
             logStep("8. Calling gpcPostProve...");
-            const postProveResult = gpcPostProve(
-                proof, 
-                boundConfig, 
-                circuitDesc, // <<< Pass the constructed circuitDesc object
-                proofInputs, // Original inputs with POD instances
+            const { revealedClaims } = gpcPostProve(
+                snarkjsProof,
+                boundConfig,
+                circuitDesc,
+                proofInputs,
                 circuitOutputs
             );
-            const finalRevealedClaims = postProveResult.revealedClaims;
 
-            // 9. Prepare Final Output Data
-            logStep("9. Preparing final output data...");
-
-            // <<< Use original finalRevealedClaims for serialization >>>
-            const serializedBoundConfig = boundConfigToJSON(boundConfig);
-            // <<< Pass the original claims object with PODValue instances >>>
-            const serializedRevealedClaims = revealedClaimsToJSON(finalRevealedClaims); // <<< Use finalRevealedClaims
-
-            const outputData = {
-                proof: proof, // snarkjs proof object is already JSON-compatible
-                boundConfig: serializedBoundConfig,
-                revealedClaims: serializedRevealedClaims
+            // 9. Assemble Final Combined Output
+            logStep("9. Assembling final combined output JSON...");
+            const finalOutput = {
+                proof: snarkjsProof,
+                boundConfig: boundConfigToJSON(boundConfig),
+                revealedClaims: revealedClaimsToJSON(revealedClaims)
             };
-    
-            // 10. Save Output
-            const outputCircuitName = circuitDesc.name; // Use name from desc
-            const outputFilename = `${configBaseName}_${outputCircuitName}_proof.json`; 
-            const outputDir = path.join(__dirname, '..', 'proofs');
-            const outputPath = path.join(outputDir, outputFilename);
-            logStep(`10. Saving final proof object to: ${outputPath}`);
-    
-            await fs.mkdir(outputDir, { recursive: true });
-            await writeJsonFile(outputPath, outputData); // writeJsonFile handles BigInts via default JSON.stringify
-  
-            // <<< Add explicit exit on success >>>
-            process.exit(0);
-        } catch (snarkError: any) {
-            console.error("\n--- ERROR during snarkjs.groth16.fullProve --- ");
-            console.error("Message:", snarkError.message);
-            // Check if the error message hints at memory issues
-            if (snarkError.message && (snarkError.message.includes('heap out of memory') || snarkError.message.includes('allocation failed'))) {
-                 console.error("Hint: This often indicates insufficient memory. Try increasing the value of NODE_OPTIONS=--max-old-space-size=<memory_in_mb> when running the script.");
+
+            // Stringify BigInts for JSON compatibility in the combined file (optional)
+            // const finalOutputStringified = stringifyBigIntsRecursive(finalOutput);
+
+            // Write the combined file (still potentially useful for some contexts)
+            await writeJsonFile(outputCombinedJsonPath, finalOutput);
+            console.log(`Final combined proof data saved to: ${outputCombinedJsonPath}`);
+
+            // <<< Add termination logic here >>>
+            logStep("10. Terminating snarkjs workers...");
+            if (typeof (groth16 as any)?.thread?.terminateAll === 'function') {
+                await (groth16 as any).thread.terminateAll();
+                console.log("   snarkjs workers terminated.");
+            } else {
+                console.warn("   snarkjs worker termination function not found.");
             }
-            console.error("Stack:", snarkError.stack);
-            // Re-throw the error to be caught by the outer try-catch which exits the process
-            throw snarkError;
+
+        } catch (snarkError: any) {
+            // <<< Enhanced Error Logging >>>
+            console.error(`Error during snarkjs proof generation or GPC post-processing:`);
+            console.error("--- Error Message ---");
+            console.error(snarkError.message);
+            console.error("--- Error Stack ---");
+            console.error(snarkError.stack);
+            console.error("--- Full Error Object ---");
+            console.error(snarkError); // Log the whole object
+            // Include memory usage hint
+            if (snarkError.message && (snarkError.message.includes('heap out of memory') || snarkError.message.includes('allocation failed'))) {
+                 console.error("Hint: This might be an Out-Of-Memory error. Consider increasing NODE_OPTIONS=--max-old-space-size=<memory_in_mb> further if possible, or the circuit might be too large.");
+            }
+            // <<< End Enhanced Logging >>>
+
+            // <<< Also terminate on error >>>
+            logStep("Terminating snarkjs workers after error...");
+            if (typeof (groth16 as any)?.thread?.terminateAll === 'function') {
+                await (groth16 as any).thread.terminateAll();
+                console.log("   snarkjs workers terminated.");
+            } else {
+                console.warn("   snarkjs worker termination function not found.");
+            }
+
+            throw snarkError; // Re-throw
         }
 
     } catch (error: any) {
-        console.error(`\n--- ERROR DURING PROOF GENERATION ---`);
-        console.error(error.message);
-        console.error(error.stack);
+        console.error(`\n--- GPC Proof Generation Failed ---`);
+        console.error(error);
+        // <<< Terminate on outer error too >>>
+        logStep("Terminating snarkjs workers after outer error...");
+        if (typeof (groth16 as any)?.thread?.terminateAll === 'function') {
+            await (groth16 as any).thread.terminateAll();
+            console.log("   snarkjs workers terminated.");
+        } else {
+            console.warn("   snarkjs worker termination function not found.");
+        }
         process.exit(1);
-    } finally {
-        // logStep("Proof generation process finished."); // Redundant
     }
-
 }
 
 // --- Script Execution ---
+// Use simple argv processing, expect 3 arguments now
 const args = process.argv.slice(2);
 const configArg = args[0];
 const gpcInputsArg = args[1];
+const artifactCircuitNameArg = args[2]; // New argument
 
-if (!configArg || !gpcInputsArg) {
-    console.error("Usage: pnpm generate-proof <path/to/config.ts> <path/to/inputs.json>");
+if (!configArg || !gpcInputsArg || !artifactCircuitNameArg) { // Check for all 3
+    console.error("Usage: pnpm generate-proof <path/to/config.ts> <path/to/inputs.json> <artifactCircuitName>");
     process.exit(1);
 }
 
-generateProof(configArg, gpcInputsArg).catch(error => {
-    // Errors should be caught within generateProof, but have a safety net
-    console.error("\n--- UNHANDLED ERROR ---");
-    console.error(error);
+generateProof(configArg, gpcInputsArg, artifactCircuitNameArg) // Pass the new arg
+ .then(() => {
+    console.log("--- Proof Generation Script Finished Successfully ---");
+    process.exit(0); // Explicit success exit
+  })
+ .catch(error => {
+    // Error already logged, termination handled in generateProof
     process.exit(1);
-});
+  });
+
 
 async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs> {
-    // <<< Resolve path relative to CWD >>>
     const absolutePath = path.resolve(process.cwd(), proofInputsPath);
     console.log(`Attempting to load GPC inputs from provided path: ${proofInputsPath} (resolved: ${absolutePath})`);
     try {
+        const { Identity } = await import('@semaphore-protocol/identity'); // Dynamic import
         const fileContent = await fs.readFile(absolutePath, 'utf-8');
-        // <<< Parse without custom reviver >>>
         const parsedInputs = JSON.parse(fileContent);
-        if (parsedInputs === null || typeof parsedInputs !== 'object') { // <<< Check for null explicitly
+        if (parsedInputs === null || typeof parsedInputs !== 'object') {
             throw new Error(`Could not read or parse JSON file.`);
         }
 
-        // Manually deserialize PODs
         const deserializedPods: Record<string, POD> = {};
         if (parsedInputs.pods && typeof parsedInputs.pods === 'object') {
             for (const key in parsedInputs.pods) {
                 if (Object.prototype.hasOwnProperty.call(parsedInputs.pods, key)) {
-                    // Assume the value is a valid JSONPOD structure
                     try {
                         deserializedPods[key] = POD.fromJSON(parsedInputs.pods[key]);
                     } catch (podError: any) {
@@ -360,7 +382,6 @@ async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs>
             throw new Error("Parsed input data does not contain a valid 'pods' object.");
         }
 
-        // <<< Manually parse membershipLists using podValueFromJSON >>>
         let deserializedMembershipLists: GPCProofInputs['membershipLists'] = undefined;
         if (parsedInputs.membershipLists && typeof parsedInputs.membershipLists === 'object') {
             deserializedMembershipLists = {};
@@ -370,53 +391,81 @@ async function loadProofInputs(proofInputsPath: string): Promise<GPCProofInputs>
                     if (!Array.isArray(jsonList)) {
                         throw new Error(`Membership list '${listName}' is not an array.`);
                     }
-                    // Map each item in the JSON list using podValueFromJSON
-                    // <<< Add type assertion based on first element >>>
                     if (jsonList.length > 0 && Array.isArray(jsonList[0])) {
-                        // If the first item is an array, assert the whole list as PODValueTuple[]
                         deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) => {
                              try {
-                                // Expecting an array (tuple) here
                                 if (!Array.isArray(jsonItem)) throw new Error('Inconsistent item type in tuple list');
                                 return jsonItem.map((tupleItem, tupleIndex) =>
-                                    podValueFromJSON(tupleItem, `${listName}[${index}][${tupleIndex}]`)
+                                    podValueFromJSON(tupleItem as JSONPODValue, `${listName}[${index}][${tupleIndex}]`)
                                 );
                              } catch (parseError: any) {
                                  console.error(`Error parsing tuple item ${index} in membership list '${listName}': ${parseError.message}`);
                                  throw parseError;
                              }
-                        }) as PODValue[][]; // <<< Assert as tuple list
+                        }) as PODValue[][];
                     } else {
-                        // Otherwise, assert the whole list as PODValue[]
                         deserializedMembershipLists[listName] = jsonList.map((jsonItem, index) => {
                             try {
-                                // Expecting a single value here
                                 if (Array.isArray(jsonItem)) throw new Error('Inconsistent item type in value list');
-                                return podValueFromJSON(jsonItem, `${listName}[${index}]`);
+                                return podValueFromJSON(jsonItem as JSONPODValue, `${listName}[${index}]`);
                             } catch (parseError: any) {
                                 console.error(`Error parsing value item ${index} in membership list '${listName}': ${parseError.message}`);
                                 throw parseError;
                             }
-                        }) as PODValue[]; // <<< Assert as value list
+                        }) as PODValue[];
                     }
                 }
             }
         }
-        // <<< End Manual Parsing >>>
 
-        // Reconstruct the GPCProofInputs object using deserialized parts
+        let finalOwnerForProofInputs: GPCProofInputs['owner'] = undefined;
+        if (parsedInputs.owner && typeof parsedInputs.owner === 'object') {
+            const jsonOwner = parsedInputs.owner as any; // Use 'any' for easier access to potentially dynamic fields
+            finalOwnerForProofInputs = {};
+    
+            if (jsonOwner.semaphoreV3?.commitment) {
+                finalOwnerForProofInputs.semaphoreV3 = {
+                    commitment: BigInt(jsonOwner.semaphoreV3.commitment)
+                } as any; 
+            }
+    
+            if (jsonOwner.semaphoreV4) {
+                const secretScalarHex = jsonOwner.semaphoreV4.secretScalar;
+                // Optional: use pre-calculated commitment if available and Identity constructor supports it,
+                // or if you want to verify it against the one derived from secretScalar.
+                // const identityCommitmentString = jsonOwner.semaphoreV4.identityCommitment;
+
+                if (typeof secretScalarHex === 'string') {
+                    const identity = new Identity("0x" + secretScalarHex);
+                    finalOwnerForProofInputs.semaphoreV4 = identity as any; // Cast to any if Identity from @semaphore-protocol/identity is compatible with IdentityV4 from @pcd/gpc
+                    console.log(`  Created Semaphore V4 Identity for owner. Commitment: ${identity.commitment.toString()}`);
+                } else {
+                    console.warn("Semaphore V4 owner data found but secretScalar is missing or not a string. Cannot create Identity.");
+                }
+            }
+    
+            if (jsonOwner.externalNullifier !== undefined) {
+                finalOwnerForProofInputs.externalNullifier = podValueFromJSON(jsonOwner.externalNullifier as JSONPODValue, 'owner.externalNullifier');
+            }
+
+            if (Object.keys(finalOwnerForProofInputs).length === 0) {
+                finalOwnerForProofInputs = undefined;
+            }
+        }
+        
+        const deserializedWatermark = parsedInputs.watermark ? podValueFromJSON(parsedInputs.watermark as JSONPODValue, 'watermark') : undefined;
+
         const proofInputs: GPCProofInputs = {
             pods: deserializedPods,
-            membershipLists: deserializedMembershipLists, // <<< Use deserialized lists
-            // <<< Need to parse owner and watermark too if they exist and contain PODValues >>>
-            owner: parsedInputs.owner, // Assume owner structure doesn't need deep PODValue parsing for now
-            watermark: parsedInputs.watermark ? podValueFromJSON(parsedInputs.watermark, 'watermark') : undefined // Parse watermark if present
+            membershipLists: deserializedMembershipLists,
+            owner: finalOwnerForProofInputs, 
+            watermark: deserializedWatermark
         };
 
         return proofInputs;
 
     } catch (error: any) {
         console.error(`Error loading inputs file ${proofInputsPath} (resolved: ${absolutePath}): ${error.message}`);
-        throw error; // Re-throw
+        throw error; 
     }
 } 

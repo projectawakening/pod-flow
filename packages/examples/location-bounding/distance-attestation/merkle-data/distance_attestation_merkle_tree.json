@@ -1,0 +1,54 @@
+{
+  "format": "simple-v1",
+  "tree": [
+    "0x7cf437afdd2d483af432039f58a3c0ef5c1d94679e4ab76379a92cde1ef3eecb",
+    "0x19a21e7e9d2b1ae4726a017fa9dce890c2bfd05ef5d06553185187a9b9b81c18",
+    "0xe5fd5f242e36c93c679a9d77a9733deefc3b2a497e4fdd4101f285bcddb1f5f5",
+    "0x2d54f630727058b56ea09174eb5d05717cfc64ac50a45f444ccfb6c1b9a0622c",
+    "0x9dbd652da7f27c71a3125ff256869416e1757c532b461a3f6782a32dd878c710",
+    "0x1a2d65b66859084d3f46f4fc2447444d46e0c018f4341b9c4a35cd7a0184fcc7",
+    "0xba49da080f00cf309487ec23f3d2801d21a9be1049cbdbb8a21eb4f0fa468341",
+    "0xb86237a88270ca7cefc339ffe8ee10b30e1fcc4cccc27e51352501c987e58c04",
+    "0x8750d01bec8d4900808e0f7fb93206bd63ba4948764cd29e5c46e436ebd68218",
+    "0x768cc9699289db86e768e025187f1934baf6e7b26b0fa22ee9917fda02c58d78",
+    "0x6f0978f4d57574ff6d952701ee05ecbd0632a1867df71e00dc11e32ee758d345",
+    "0x3127964f7efed1d01608b4b70102d3ed10ee7efccba12b524eba559c7ba87af5",
+    "0x144beecbf503c6f2207161c13abc11c462b39aae68cd342793df8fd5d26c345f",
+    "0x0659b6ad42c9c0a18950da98a2cdc010b540dd4b1e8d337db8b6154bfbd44152",
+    "0x035c78a1dd0077766ec5d1866bd30e47ea0ca917f087e394ebe8492d0d5e25dd"
+  ],
+  "values": [
+    {
+      "value": "0x768cc9699289db86e768e025187f1934baf6e7b26b0fa22ee9917fda02c58d78",
+      "treeIndex": 9
+    },
+    {
+      "value": "0x8750d01bec8d4900808e0f7fb93206bd63ba4948764cd29e5c46e436ebd68218",
+      "treeIndex": 8
+    },
+    {
+      "value": "0x6f0978f4d57574ff6d952701ee05ecbd0632a1867df71e00dc11e32ee758d345",
+      "treeIndex": 10
+    },
+    {
+      "value": "0x3127964f7efed1d01608b4b70102d3ed10ee7efccba12b524eba559c7ba87af5",
+      "treeIndex": 11
+    },
+    {
+      "value": "0x0659b6ad42c9c0a18950da98a2cdc010b540dd4b1e8d337db8b6154bfbd44152",
+      "treeIndex": 13
+    },
+    {
+      "value": "0xb86237a88270ca7cefc339ffe8ee10b30e1fcc4cccc27e51352501c987e58c04",
+      "treeIndex": 7
+    },
+    {
+      "value": "0x144beecbf503c6f2207161c13abc11c462b39aae68cd342793df8fd5d26c345f",
+      "treeIndex": 12
+    },
+    {
+      "value": "0x035c78a1dd0077766ec5d1866bd30e47ea0ca917f087e394ebe8492d0d5e25dd",
+      "treeIndex": 14
+    }
+  ]
+}

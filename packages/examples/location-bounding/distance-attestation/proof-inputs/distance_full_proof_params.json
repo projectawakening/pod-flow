@@ -1,0 +1,27 @@
+{
+  "pods": {
+    "9674482113409659571154822487230743522404188407680608677062069816960282571468": {
+      "entries": {
+        "distanceSquaredMeters": 4,
+        "keccak256_merkle_root": "0x7cf437afdd2d483af432039f58a3c0ef5c1d94679e4ab76379a92cde1ef3eecb",
+        "object1Location": "0x5d247cd92a35b66e67db4122d06660e91f600abaea0b77084d4fa6022f57e0fb",
+        "object2Location": "0x6f46877fba7983665d10a4f5354bd08fd108b1c7c3f7d2a84666bb7bd744cfdd",
+        "objectId1": {
+          "cryptographic": "0x546f601774410ed85e99e739fb228cbe"
+        },
+        "objectId2": {
+          "cryptographic": "0x2ef78d73724430637f80cc2448a49e4fe"
+        },
+        "pod_data_type": "evefrontier.distance_attestation",
+        "timeThreshold": 10000,
+        "timestamp": 1748594228958
+      },
+      "signature": "qXXHX4j2tOE13EZTPtQPcdiWtslsiTcNvlZGYFYOOCAg9kVNyCktxNi4AAXpQjgf9jYqSE/dYzE9fQ+iDHCwAg",
+      "signerPublicKey": "Mc2IbgO1ihBqpoPgE4WacZcORWNfNJko5v9rg4o2AiM"
+    }
+  },
+  "podConfigMapping": {
+    "distance": "9674482113409659571154822487230743522404188407680608677062069816960282571468"
+  },
+  "membershipLists": {}
+}

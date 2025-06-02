@@ -14,17 +14,19 @@
     "verify-proof": "ts-node scripts/verify-proof.ts"
   },
   "dependencies": {
-    "@pcd/gpc": "^0.4.0",
-    "@pcd/pod": "^0.5.0",
-    "@pcd/util": "0.5.0",
+    "@pcd/gpc": "^0.4.1",
+    "@pcd/pod": "^0.5.1",
+    "@pcd/util": "0.5.1",
+    "@pcd/gpcircuits": "^0.5.1",
+    "@semaphore-protocol/identity": "^4.10.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "devDependencies": {
-    "@pcd/gpcircuits": "^0.5.0",
     "@types/lodash": "^4.17.16",
     "@types/snarkjs": "^0.7.9",
     "@zk-kit/binary-merkle-root.circom": "^1.0.0",
-    "circomlib": "^2.0.5"
+    "circomlib": "^2.0.5",
+    "commander": "^13.1.0"
   }
 }

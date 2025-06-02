@@ -1,0 +1,101 @@
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.7.0 <0.9.0;
+
+/**
+ * This file is auto-generated. Do not edit directly.
+ *
+ * @title G1 Arithmetic Utilities for Groth16 Verifier
+ * @notice Library containing G1 point arithmetic helper functions (ecMul, ecAdd via precompiles)
+ *         designed to be called via DELEGATECALL from arrayed IC libraries.
+ * @dev This library MUST be deployed separately from the main verifier and IC libraries.
+ *      It uses assembly and low-level calls to interact with Ethereum precompiles for efficiency.
+ *      Error handling propagates reverts from precompile failures.
+ */
+library Groth16G1UtilsLib {
+    /**
+     * @notice External wrapper for G1 scalar multiplication and addition, designed for DELEGATECALL.
+     * @dev Performs the operation: `newPR = pR + (s * P(x, y))` using ecAdd and ecMul precompiles.
+     *  Takes the current accumulator point (pR) components and the components of the point to add (x, y) and its scalar (s).
+     *  Calls the internal assembly implementation `_g1_mulAccC_asm`.
+     * @param pRx The x-coordinate of the current accumulator point (pR).
+     * @param pRy The y-coordinate of the current accumulator point (pR).
+     * @param x The x-coordinate of the point P to be scaled and added.
+     * @param y The y-coordinate of the point P to be scaled and added.
+     * @param s The scalar value to multiply point P by.
+     * @return newPRx The x-coordinate of the updated accumulator point.
+     * @return newPRy The y-coordinate of the updated accumulator point.
+     */
+    function delegatecall_g1_mulAccC(uint256 pRx, uint256 pRy, uint256 x, uint256 y, uint256 s) external view returns (uint256 newPRx, uint256 newPRy) {
+        // Assemble the incoming accumulator point components into a memory array for the internal function.
+        uint256[2] memory localPR = [pRx, pRy];
+        // Call the internal assembly logic which modifies localPR in place.
+        _g1_mulAccC_asm(localPR, x, y, s);
+        // Return the updated accumulator point components.
+        return (localPR[0], localPR[1]);
+    }
+
+    /**
+     * @notice Internal assembly implementation for G1 scalar multiplication and addition.
+     * @dev Calculates `pR = pR + (s * P(x, y))` by calling ecMul (address 0x07) and ecAdd (address 0x06) precompiles.
+     *  Modifies the input memory array `pR` directly in place.
+     *  Reverts and propagates precompile errors if ecMul or ecAdd fail.
+     * @param pR Memory pointer to a uint256[2] array holding the G1 point accumulator (modified in place).
+     * @param x The x-coordinate of the point P.
+     * @param y The y-coordinate of the point P.
+     * @param s The scalar multiplier.
+     */
+    function _g1_mulAccC_asm(uint256[2] memory pR, uint256 x, uint256 y, uint256 s) internal view {
+        assembly {
+            let success := 0      // Flag to track precompile success.
+            let freeMemPtr := mload(0x40) // Get free memory pointer.
+
+            // --- Perform ecMul: P_scaled = s * P(x, y) ---
+            // Prepare input memory for ecMul: [x, y, s]
+            mstore(freeMemPtr, x)         // P.x
+            mstore(add(freeMemPtr, 32), y) // P.y
+            mstore(add(freeMemPtr, 64), s) // scalar s
+
+            // Call ecMul precompile (address 0x07).
+            // staticcall(gas, to, inputOffset, inputSize, outputOffset, outputSize)
+            // Input: 96 bytes (x, y, s). Output: 64 bytes (Px_scaled, Py_scaled) written back to freeMemPtr.
+            success := staticcall(sub(gas(), 2000), 7, freeMemPtr, 96, freeMemPtr, 64)
+
+            // Check for ecMul failure.
+            if iszero(success) {
+                 // Revert with error from precompile if ecMul fails.
+                 // This happens with invalid inputs (e.g., point not on curve, scalar out of range).
+                 // Propagate the revert data from the precompile.
+                 returndatacopy(0, 0, returndatasize()) // Copy revert message to memory [0..returndatasize-1]
+                 revert(0, returndatasize())          // Revert with the copied message
+            }
+
+            // Result of ecMul (P_scaled.x, P_scaled.y) is now at freeMemPtr and add(freeMemPtr, 32).
+
+            // --- Perform ecAdd: pR = pR + P_scaled ---
+            // Prepare input memory for ecAdd: [Px_scaled, Py_scaled, pR.x, pR.y]
+            // Px_scaled = mload(freeMemPtr)
+            // Py_scaled = mload(add(freeMemPtr, 32))
+            mstore(add(freeMemPtr, 64), mload(pR))         // pR.x (current accumulator x)
+            mstore(add(freeMemPtr, 96), mload(add(pR, 32))) // pR.y (current accumulator y)
+
+            // Call ecAdd precompile (address 0x06).
+            // Input: 128 bytes (Px_scaled, Py_scaled, pR.x, pR.y).
+            // Output: 64 bytes (New pR.x, New pR.y) written directly to the memory location pointed to by `pR`.
+            success := staticcall(sub(gas(), 2000), 6, freeMemPtr, 128, pR, 64)
+
+            // Check for ecAdd failure.
+            if iszero(success) {
+                 // Revert with error from precompile if ecAdd fails.
+                 // This happens with invalid inputs (e.g., points not on curve).
+                 // Propagate the revert data from the precompile.
+                 returndatacopy(0, 0, returndatasize())
+                 revert(0, returndatasize())
+            }
+            // The memory location pointed to by `pR` now holds the updated accumulator point.
+
+            // Update free memory pointer
+            // We used 128 bytes starting from freeMemPtr for the ecAdd input.
+            mstore(0x40, add(freeMemPtr, 128))
+        }
+    }
+}
